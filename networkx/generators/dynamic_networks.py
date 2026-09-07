@@ -141,6 +141,9 @@ def gradient_network(
     NetworkX DiGraph
         The Gradient Network graph of the input substrate graph. Edge attribute
         ``size`` contains the normalized gradient magnitude ``|h_u - h_v| / distance``.
+        Every node has an out-degree of 1. If a node is a local extremum (or isolated),
+        its steepest neighbor is itself, resulting in a self-loop with ``size = 0.0``
+        representing a sink of the gradient flow.
 
     Examples
     --------
@@ -156,6 +159,8 @@ def gradient_network(
     [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0)]
     >>> H[1][0]["size"]
     8.0
+    >>> H[0][0]["size"]
+    0.0
 
     References
     ----------
