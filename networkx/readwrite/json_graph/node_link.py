@@ -26,7 +26,7 @@ def _to_tuple(x):
     >>> _to_tuple([1, 2, [3, 4]])
     (1, 2, (3, 4))
     """
-    if not isinstance(x, (tuple, list)):
+    if not isinstance(x, tuple | list):
         return x
     return tuple(map(_to_tuple, x))
 
@@ -132,6 +132,7 @@ def node_link_data(
     return data
 
 
+@nx._dispatchable(graphs=None)
 def node_link_graph(
     data,
     directed=False,
@@ -178,7 +179,7 @@ def node_link_graph(
 
     Create data in node-link format by converting a graph.
 
-    >>> G = nx.Graph([('A', 'B')])
+    >>> G = nx.Graph([("A", "B")])
     >>> data = nx.node_link_data(G)
     >>> data
     {'directed': False, 'multigraph': False, 'graph': {}, 'nodes': [{'id': 'A'}, {'id': 'B'}], 'links': [{'source': 'A', 'target': 'B'}]}

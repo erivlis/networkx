@@ -25,7 +25,7 @@ def _split_n_from(n, min_size_of_first_part):
         yield p1, n - p1
 
 
-@nx._dispatch(node_attrs="node_weight", edge_attrs="edge_weight")
+@nx._dispatchable(node_attrs="node_weight", edge_attrs="edge_weight")
 def lukes_partitioning(G, max_size, node_weight=None, edge_weight=None):
     """Optimal partitioning of a weighted tree using the Lukes algorithm.
 
@@ -33,11 +33,11 @@ def lukes_partitioning(G, max_size, node_weight=None, edge_weight=None):
     node weights and float edge weights. The resulting clusters are such
     that the total weight of the nodes in each cluster does not exceed
     max_size and that the weight of the edges that are cut by the partition
-    is minimum. The algorithm is based on LUKES[1].
+    is minimum. The algorithm is based on [1]_.
 
     Parameters
     ----------
-    G : graph
+    G : NetworkX graph
 
     max_size : int
         Maximum weight a partition can have in terms of sum of
@@ -66,7 +66,7 @@ def lukes_partitioning(G, max_size, node_weight=None, edge_weight=None):
 
     References
     ----------
-    .. Lukes, J. A. (1974).
+    .. [1] Lukes, J. A. (1974).
        "Efficient Algorithm for the Partitioning of Trees."
        IBM Journal of Research and Development, 18(3), 217–224.
 
