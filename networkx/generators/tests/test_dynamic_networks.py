@@ -329,3 +329,34 @@ def test_gradient_network_all_callable_arities_and_fallbacks():
         )
     )
     assert len(seq8) == 1
+
+
+def test_gradient_network_isolated_nodes_and_empty_graph():
+    """Test gradient network behavior on empty graphs and graphs with isolated nodes."""
+    # Empty graph
+    G_empty = nx.Graph()
+    H_empty = nx.gradient_network(G_empty)
+    assert len(H_empty) == 0
+    assert H_empty.number_of_edges() == 0
+
+    seq_empty = list(nx.gradient_network_sequence(G_empty, times=[0, 1]))
+    assert len(seq_empty) == 2
+    assert len(seq_empty[0][1]) == 0
+
+    # Graph with isolated node and disconnected components
+    G = nx.Graph()
+    G.add_node(1, value=10.0)
+    G.add_edge(2, 3)
+    G.nodes[2]["value"] = 5.0
+    G.nodes[3]["value"] = 8.0
+
+    H = nx.gradient_network(G)
+    assert len(H) == 3
+    # Isolated node 1 forms self-loop with size 0.0
+    assert H.has_edge(1, 1)
+    assert H[1][1]["size"] == 0.0
+    # Component {2, 3}: node 2 points to 3, node 3 points to itself
+    assert H.has_edge(2, 3)
+    assert H[2][3]["size"] == 3.0
+    assert H.has_edge(3, 3)
+    assert H[3][3]["size"] == 0.0
