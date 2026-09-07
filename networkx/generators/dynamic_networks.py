@@ -1,5 +1,5 @@
 """
-Dynamic Networks
+Dynamic Networks.
 """
 import itertools
 import operator
@@ -16,6 +16,7 @@ def _value_getter(value):
 
 @not_implemented_for("directed")
 @not_implemented_for("multigraph")
+@nx._dispatchable(node_attrs="value", edge_attrs="distance")
 def gradient_network(
     G, scalar_field_value="value", scalar_field_distance="distance", ascending=True
 ):
