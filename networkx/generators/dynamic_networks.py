@@ -27,17 +27,13 @@ def _node_value_function(scalar_field_value):
                 )
                 and p.default is inspect.Parameter.empty
             ]
-            num_pos_required = len(params)
+            num_pos = len(params)
         except (ValueError, TypeError):
-            num_pos_required = None
+            num_pos = None
 
-        if num_pos_required == 0:
-            try:
-                scalar_field_value()
-                return lambda n, d: scalar_field_value()
-            except TypeError:
-                pass
-        if num_pos_required == 1:
+        if num_pos == 0:
+            return lambda n, d: scalar_field_value()
+        if num_pos == 1:
             return lambda n, d: scalar_field_value(n)
         return lambda n, d: scalar_field_value(n, d)
 
@@ -61,19 +57,15 @@ def _edge_distance_function(distance):
                 )
                 and p.default is inspect.Parameter.empty
             ]
-            num_pos_required = len(params)
+            num_pos = len(params)
         except (ValueError, TypeError):
-            num_pos_required = None
+            num_pos = None
 
-        if num_pos_required == 0:
-            try:
-                distance()
-                return lambda u, v, d: distance()
-            except TypeError:
-                pass
-        if num_pos_required == 1:
+        if num_pos == 0:
+            return lambda u, v, d: distance()
+        if num_pos == 1:
             return lambda u, v, d: distance(d)
-        if num_pos_required == 2:
+        if num_pos == 2:
             return lambda u, v, d: distance(u, v)
         return lambda u, v, d: distance(u, v, d)
 
@@ -229,24 +221,9 @@ def _bind_time_node_value(scalar_field_value, t):
 
         if num_pos == 1:
             return lambda n, d: scalar_field_value(t)
-        elif num_pos == 2:
+        if num_pos == 2:
             return lambda n, d: scalar_field_value(n, t)
-        elif num_pos == 3:
-            return lambda n, d: scalar_field_value(n, d, t)
-        else:
-            def val_func(n, d):
-                try:
-                    return scalar_field_value(n, d, t)
-                except TypeError:
-                    try:
-                        return scalar_field_value(n, t)
-                    except TypeError:
-                        try:
-                            return scalar_field_value(t)
-                        except TypeError:
-                            return scalar_field_value(n, d)
-
-            return val_func
+        return lambda n, d: scalar_field_value(n, d, t)
 
     def val_func_from_attr(node, data):
         val = data.get(scalar_field_value, 0)
@@ -281,24 +258,9 @@ def _bind_time_edge_distance(distance, t):
 
         if num_pos == 1:
             return lambda u, v, d: distance(t)
-        elif num_pos == 3:
+        if num_pos == 3:
             return lambda u, v, d: distance(u, v, t)
-        elif num_pos == 4:
-            return lambda u, v, d: distance(u, v, d, t)
-        else:
-            def dist_func(u, v, d):
-                try:
-                    return distance(u, v, d, t)
-                except TypeError:
-                    try:
-                        return distance(u, v, t)
-                    except TypeError:
-                        try:
-                            return distance(t)
-                        except TypeError:
-                            return distance(u, v, d)
-
-            return dist_func
+        return lambda u, v, d: distance(u, v, d, t)
 
     def dist_func_from_attr(u, v, data):
         val = data.get(distance, 1.0)
