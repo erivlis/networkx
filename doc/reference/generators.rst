@@ -380,7 +380,7 @@ Time Series
    visibility_graph
 
 Dynamic Networks
-____________
+----------------
 .. automodule:: networkx.generators.dynamic_networks
 .. autosummary::
    :toctree: generated/
