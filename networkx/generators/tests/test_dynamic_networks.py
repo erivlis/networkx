@@ -38,9 +38,14 @@ def test_gradient_network_random_values():
     substrate_network = nx.Graph(EDGES)
     nx.set_node_attributes(substrate_network, RANDOM_SCALAR_FIELD_VALUES, "value")
 
-    # act
-    actual_gradient_network_1st_run = nx.gradient_network(substrate_network)
-    actual_gradient_network_2nd_run = nx.gradient_network(substrate_network)
+    # act: specify backend="networkx" because non-deterministic callable values
+    # cannot be verified across the dual-invocation backend testing harness.
+    actual_gradient_network_1st_run = nx.gradient_network(
+        substrate_network, backend="networkx"
+    )
+    actual_gradient_network_2nd_run = nx.gradient_network(
+        substrate_network, backend="networkx"
+    )
 
     # assert
     assert actual_gradient_network_1st_run.number_of_nodes() == len(substrate_network)
