@@ -209,3 +209,120 @@ def test_gradient_network_sequence_raises_error(graph_class):
     with pytest.raises(nx.NetworkXNotImplemented):
         _ = list(nx.gradient_network_sequence(G, times=[0, 1]))
 
+
+def test_gradient_network_all_callable_arities_and_fallbacks():
+    """Test all callable arity variants and fallback branches for 100% coverage."""
+
+    class NoSigNode:
+        def __call__(self, *args):
+            return 42.0
+
+        @property
+        def __signature__(self):
+            raise TypeError("no signature")
+
+    class NoSigEdge:
+        def __call__(self, *args):
+            return 2.5
+
+        @property
+        def __signature__(self):
+            raise TypeError("no signature")
+
+    G = nx.path_graph(3)
+
+    # 1. Node callable with no signature
+    H_no_sig = nx.gradient_network(G, scalar_field_value=NoSigNode())
+    assert len(H_no_sig) == 3
+
+    # 2. Edge callable with no signature
+    H_no_sig_edge = nx.gradient_network(G, scalar_field_distance=NoSigEdge())
+    assert len(H_no_sig_edge) == 3
+
+    # 3. 0-arg node callable
+    H_0arg_node = nx.gradient_network(G, scalar_field_value=lambda: 5.0)
+    assert len(H_0arg_node) == 3
+
+    # 4. 0-arg edge callable
+    H_0arg_edge = nx.gradient_network(G, scalar_field_distance=lambda: 3.0)
+    assert len(H_0arg_edge) == 3
+
+    # 5. 1-arg edge callable: f(d)
+    H_1arg_edge = nx.gradient_network(G, scalar_field_distance=lambda d: 2.0)
+    assert len(H_1arg_edge) == 3
+
+    # 6. 2-arg edge callable: f(u, v)
+    H_2arg_edge = nx.gradient_network(G, scalar_field_distance=lambda u, v: 1.5)
+    assert len(H_2arg_edge) == 3
+
+    # 7. Edge distance returning callable
+    H_ret_callable = nx.gradient_network(
+        G, scalar_field_distance=lambda u, v, d: (lambda: 4.0)
+    )
+    assert len(H_ret_callable) == 3
+
+    # 8. Edge distance returning None
+    H_ret_none = nx.gradient_network(G, scalar_field_distance=lambda u, v, d: None)
+    assert len(H_ret_none) == 3
+
+    # 9. Sequence: 1-arg node callable f(t)
+    seq1 = list(
+        nx.gradient_network_sequence(G, [1], scalar_field_value=lambda t: t * 2.0)
+    )
+    assert len(seq1) == 1
+
+    # 10. Sequence: 3-arg node callable f(n, d, t)
+    seq2 = list(
+        nx.gradient_network_sequence(
+            G, [1], scalar_field_value=lambda n, d, t: float(n + t)
+        )
+    )
+    assert len(seq2) == 1
+
+    # 11. Sequence: Node attribute callable with t and without t
+    G.nodes[0]["val"] = lambda t: float(t * 5.0)
+    G.nodes[1]["val"] = lambda: 10.0
+    seq3 = list(nx.gradient_network_sequence(G, [2], scalar_field_value="val"))
+    assert len(seq3) == 1
+
+    # 12. Sequence: Edge callable 1-arg f(t)
+    seq4 = list(
+        nx.gradient_network_sequence(
+            G, [1], scalar_field_distance=lambda t: float(t + 1.0)
+        )
+    )
+    assert len(seq4) == 1
+
+    # 13. Sequence: Edge callable 4-arg f(u, v, d, t)
+    seq5 = list(
+        nx.gradient_network_sequence(
+            G, [1], scalar_field_distance=lambda u, v, d, t: float(u + v + t)
+        )
+    )
+    assert len(seq5) == 1
+
+    # 14. Sequence: Edge attribute callable with t and without t
+    G[0][1]["dist"] = lambda t: float(t + 2.0)
+    G[1][2]["dist"] = lambda: 3.0
+    seq6 = list(nx.gradient_network_sequence(G, [1], scalar_field_distance="dist"))
+    assert len(seq6) == 1
+
+    # 15. Sequence: Edge attribute dict with None
+    G[0][1]["dist_none"] = {1: None}
+    seq7 = list(
+        nx.gradient_network_sequence(G, [1], scalar_field_distance="dist_none")
+    )
+    assert len(seq7) == 1
+
+    # 16. Sequence: with no signature node & edge callables
+    seq8 = list(
+        nx.gradient_network_sequence(
+            G,
+            [1],
+            scalar_field_value=NoSigNode(),
+            scalar_field_distance=NoSigEdge(),
+        )
+    )
+    assert len(seq8) == 1
+
+
