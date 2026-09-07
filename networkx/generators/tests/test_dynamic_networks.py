@@ -1,4 +1,5 @@
 """Unit tests for the :mod:`networkx.generators.dynamic_networks` module."""
+
 import itertools
 import random
 
@@ -10,7 +11,7 @@ NODES = range(100)
 EDGES = list(itertools.combinations(NODES, 2))
 STATIC_SCALAR_FIELD_VALUES = {k: random.uniform(5, 25) for k in NODES}
 RANDOM_SCALAR_FIELD_VALUES = {
-    k: lambda: v + random.uniform(-5.0, 5.0)
+    k: (lambda val=v: val + random.uniform(-5.0, 5.0))
     for k, v in STATIC_SCALAR_FIELD_VALUES.items()
 }
 
@@ -115,9 +116,12 @@ def test_gradient_network_callables_as_parameters():
     G = nx.path_graph(3)
 
     # Node value supplier as callable
-    value_func = lambda n: float(n * 10)
+    def value_func(n):
+        return float(n * 10)
+
     # Edge distance supplier as callable
-    dist_func = lambda u, v, d: 2.0
+    def dist_func(u, v, d):
+        return 2.0
 
     H = nx.gradient_network(
         G,
@@ -179,9 +183,12 @@ def test_gradient_network_sequence_callables():
     G = nx.path_graph(3)
 
     # Node potential as function of (node, t): at t=0, node 2 is max; at t=2, node 0 is max
-    value_func = lambda n, t: float((2 - n) * t + n * (2 - t))
+    def value_func(n, t):
+        return float((2 - n) * t + n * (2 - t))
+
     # Edge distance as function of (u, v, t)
-    dist_func = lambda u, v, t: 1.0 + t
+    def dist_func(u, v, t):
+        return 1.0 + t
 
     snapshots = list(
         nx.gradient_network_sequence(
@@ -257,7 +264,7 @@ def test_gradient_network_all_callable_arities_and_fallbacks():
 
     # 7. Edge distance returning callable
     H_ret_callable = nx.gradient_network(
-        G, scalar_field_distance=lambda u, v, d: (lambda: 4.0)
+        G, scalar_field_distance=lambda u, v, d: lambda: 4.0
     )
     assert len(H_ret_callable) == 3
 
@@ -309,9 +316,7 @@ def test_gradient_network_all_callable_arities_and_fallbacks():
 
     # 15. Sequence: Edge attribute dict with None
     G[0][1]["dist_none"] = {1: None}
-    seq7 = list(
-        nx.gradient_network_sequence(G, [1], scalar_field_distance="dist_none")
-    )
+    seq7 = list(nx.gradient_network_sequence(G, [1], scalar_field_distance="dist_none"))
     assert len(seq7) == 1
 
     # 16. Sequence: with no signature node & edge callables
@@ -324,5 +329,3 @@ def test_gradient_network_all_callable_arities_and_fallbacks():
         )
     )
     assert len(seq8) == 1
-
-
