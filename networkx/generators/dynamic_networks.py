@@ -4,7 +4,7 @@ Dynamic Networks.
 
 import inspect
 import itertools
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 
 import networkx as nx
 from networkx.utils import not_implemented_for
@@ -83,7 +83,7 @@ def gradient_network(
     scalar_field_value: str | Callable = "value",
     scalar_field_distance: str | Callable = "distance",
     ascending: bool = True,
-):
+) -> nx.DiGraph:
     r"""Returns a Gradient Network graph of an input substrate network graph.
 
     In network science, a Gradient Network is a directed subnetwork of an undirected
@@ -280,7 +280,7 @@ def gradient_network_sequence(
     scalar_field_value: str | Callable = "value",
     scalar_field_distance: str | Callable = "distance",
     ascending: bool = True,
-):
+) -> Generator[tuple[object, nx.DiGraph], None, None]:
     r"""Yields time-synchronized gradient network snapshots over an iterable of times.
 
     In dynamic network systems, node potentials and edge distances may evolve over
