@@ -1,5 +1,5 @@
 """
-Transport Networks
+Dynamic Networks
 """
 import itertools
 import operator
@@ -39,9 +39,11 @@ def gradient_network(
         An edge `distance` attribute may be either a `Number` or a `Callable` that
         returns a Number.
     scalar_field_value: str | Callable[[], int | float]. Default: 'value'.
-        The attribute name for the source of the scalar field value.
-    scalar_field_distance: str Callable[[], int | float]. Default: 'distance'.
-        The attribute name for the source of the scalar field distance.
+        The attribute name for the source of the scalar field value,
+        or a callable that supplies scalar value.
+    scalar_field_distance: str | Callable[[], int | float]. Default: 'distance'.
+        The attribute name for the source of the scalar field distance,
+        or a callable that supplies distance value.
     ascending: bool
         Choose an ascending (True) or descending (False) gradient graph. Default: True.
 
