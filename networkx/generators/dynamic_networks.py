@@ -1,60 +1,168 @@
 """
 Dynamic Networks.
 """
+import inspect
 import itertools
-import operator
+from collections.abc import Callable
 
 import networkx as nx
 from networkx.utils import not_implemented_for
 
-__all__ = ("gradient_network",)
+__all__ = (
+    "gradient_network",
+    "gradient_network_sequence",
+)
 
 
-def _value_getter(value):
-    return value() if callable(value) else value
+def _node_value_function(scalar_field_value):
+    if callable(scalar_field_value):
+        try:
+            params = [
+                p
+                for p in inspect.signature(scalar_field_value).parameters.values()
+                if p.kind
+                in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+                and p.default is inspect.Parameter.empty
+            ]
+            num_pos_required = len(params)
+        except (ValueError, TypeError):
+            num_pos_required = None
+
+        if num_pos_required == 0:
+            try:
+                scalar_field_value()
+                return lambda n, d: scalar_field_value()
+            except TypeError:
+                pass
+        if num_pos_required == 1:
+            return lambda n, d: scalar_field_value(n)
+        return lambda n, d: scalar_field_value(n, d)
+
+    return lambda n, d: (
+        d[scalar_field_value]()
+        if callable(d.get(scalar_field_value, 0))
+        else d.get(scalar_field_value, 0)
+    )
+
+
+def _edge_distance_function(distance):
+    if callable(distance):
+        try:
+            params = [
+                p
+                for p in inspect.signature(distance).parameters.values()
+                if p.kind
+                in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+                and p.default is inspect.Parameter.empty
+            ]
+            num_pos_required = len(params)
+        except (ValueError, TypeError):
+            num_pos_required = None
+
+        if num_pos_required == 0:
+            try:
+                distance()
+                return lambda u, v, d: distance()
+            except TypeError:
+                pass
+        if num_pos_required == 1:
+            return lambda u, v, d: distance(d)
+        if num_pos_required == 2:
+            return lambda u, v, d: distance(u, v)
+        return lambda u, v, d: distance(u, v, d)
+
+    return lambda u, v, d: (
+        d[distance]()
+        if callable(d.get(distance, 1.0))
+        else d.get(distance, 1.0)
+    )
 
 
 @not_implemented_for("directed")
 @not_implemented_for("multigraph")
-@nx._dispatchable(node_attrs="value", edge_attrs="distance")
+@nx._dispatchable(
+    node_attrs="scalar_field_value", edge_attrs="scalar_field_distance"
+)
 def gradient_network(
-    G, scalar_field_value="value", scalar_field_distance="distance", ascending=True
+    G,
+    scalar_field_value: str | Callable = "value",
+    scalar_field_distance: str | Callable = "distance",
+    ascending: bool = True,
 ):
-    """
-    Returns a Gradient Network graph of an input substrate network graph.
+    r"""Returns a Gradient Network graph of an input substrate network graph.
 
     In network science, a Gradient Network is a directed subnetwork of an undirected
     "substrate" network where each node has an associated scalar potential and one
     out-link that points to the node with the largest (or smallest) potential in its
     neighborhood, defined as the union of itself and its neighbors on the substrate
-    network [2]_.
+    network [1]_, [2]_.
+
+    ::
+
+        Substrate Network (undirected):
+
+               [h_1 = 3]
+                 ( n1 )
+                  /
+                ( u ) --------- distance d --------- ( v )   <-- max potential in N(u) U {u}
+              [h_u = 2] \                          [h_v = 8]
+                         ( n2 )
+                       [h_2 = 5]
+
+            scalar_field_value:    supplies node potentials h_u, h_v, ...
+            scalar_field_distance: supplies edge distance d between neighbors
+
+        Gradient Network (directed, ascending):
+
+                ( u ) ================ size ===============> ( v )
+                             size = |h_u - h_v| / distance
 
     Parameters
     ----------
-    G: NetworkX Graph
-        Substrate Network graph. Does not support directed graphs and multigraphs.
+    G : NetworkX Graph
+        Substrate network graph. Does not support directed graphs and multigraphs.
         The graph nodes should have an attribute as a source for the scalar field value.
-        A node `value` attribute should be either a `Number` (e.g.int, float, etc.) or a
+        A node attribute may be either a `Number` (e.g. int, float, etc.) or a
         `Callable` that returns a Number.
         The graph edges may have an attribute as a source of a `distance` value.
         An edge `distance` attribute may be either a `Number` or a `Callable` that
         returns a Number.
-    scalar_field_value: str | Callable[[], int | float]. Default: 'value'.
-        The attribute name for the source of the scalar field value,
-        or a callable that supplies scalar value.
-    scalar_field_distance: str | Callable[[], int | float]. Default: 'distance'.
-        The attribute name for the source of the scalar field distance,
-        or a callable that supplies distance value.
-    ascending: bool
-        Choose an ascending (True) or descending (False) gradient graph. Default: True.
+    scalar_field_value : str or Callable, default 'value'
+        The attribute name for the source of each node's scalar field value,
+        or a callable that supplies the scalar value given ``(node, data)``,
+        ``(node)``, or parameterless.
+    scalar_field_distance : str or Callable, default 'distance'
+        The attribute name for the source of the edge distance, or a callable
+        that supplies the distance value given ``(u, v, data)`` or parameterless.
+    ascending : bool, default True
+        Choose an ascending (True) or descending (False) gradient graph.
 
     Returns
     -------
     NetworkX DiGraph
-        The Gradient Network graph of the input substrate graph
+        The Gradient Network graph of the input substrate graph. Edge attribute
+        ``size`` contains the normalized gradient magnitude ``|h_u - h_v| / distance``.
 
     Examples
     --------
+    In a star graph where the central node has the highest potential, all leaf
+    nodes point to the center, and the center points to itself in an ascending
+    gradient network:
+
+    >>> G = nx.star_graph(4)
+    >>> potentials = {0: 10, 1: 2, 2: 3, 3: 4, 4: 5}
+    >>> nx.set_node_attributes(G, potentials, "value")
+    >>> H = nx.gradient_network(G)
+    >>> sorted(H.edges())
+    [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0)]
+    >>> H[1][0]["size"]
+    8.0
 
     References
     ----------
@@ -62,40 +170,242 @@ def gradient_network(
            Korniss, G (2008-04-02).
            "Gradient networks". Journal of Physics A: Mathematical and Theoretical.
            IOP Publishing. 41 (15): 155103. arXiv:cond-mat/0408262.
-           Bibcode:2008JPhA...41o5103T. doi:10.1088/1751-8113/41/15/155103.
-           ISSN 1751-8113. S2CID 118983053.
-           https://arxiv.org/abs/cond-mat/0408262v1
-           https://doi.org/10.48550/arXiv.cond-mat/0408262
+           https://doi.org/10.1088/1751-8113/41/15/155103
     .. [2] Danila, Bogdan; Yu, Yong; Earl, Samuel; Marsh, John A.; Toroczkai, Zoltán;
            Bassler, Kevin E. (2006-10-19).
            "Congestion-gradient driven transport on complex networks".
            Physical Review E. 74 (4): 046114. arXiv:cond-mat/0603861.
-           Bibcode:2006PhRvE..74d6114D. doi:10.1103/physreve.74.046114. ISSN 1539-3755.
-           PMID 17155140. S2CID 16009613.
-           https://arxiv.org/abs/cond-mat/0603861
-           https://doi.org/10.48550/arXiv.cond-mat/0603861
-           https://journals.aps.org/pre/abstract/10.1103/PhysRevE.74.046114
+           https://doi.org/10.1103/physreve.74.046114
+    .. [3] "Gradient network", Wikipedia, https://en.wikipedia.org/wiki/Gradient_network
     """
+    node_val_func = _node_value_function(scalar_field_value)
+    node_values = {
+        node: node_val_func(node, data) for node, data in G.nodes(data=True)
+    }
+
+    edge_dist_func = _edge_distance_function(scalar_field_distance)
 
     H = nx.DiGraph()
+    H.add_nodes_from(G)
 
     scalar_operation = max if ascending else min
-    for node, h in G.nodes(data=scalar_field_value, default=0):
-        h = _value_getter(h)
+    for node in G:
+        node_val = node_values[node]
+        nbrs_and_self = itertools.chain(G.neighbors(node), (node,))
+        neighbor = scalar_operation(nbrs_and_self, key=node_values.get)
+        neighbor_val = node_values[neighbor]
 
-        scalar_field_values = itertools.chain(
-            (
-                (n, _value_getter(G.nodes[n].get(scalar_field_value, 0)))
-                for n in G.neighbors(node)
-            ),
-            ((node, h),),
-        )
-        neighbor, neighbor_h = scalar_operation(
-            scalar_field_values, key=operator.itemgetter(1)
-        )
-        distance = (
-            G.get_edge_data(node, neighbor, default={}).get(scalar_field_distance)
-            or 1.0
-        )
-        H.add_edge(node, neighbor, size=abs(h - neighbor_h) / distance)
+        if node == neighbor:
+            distance = 1.0
+        else:
+            distance = edge_dist_func(node, neighbor, G[node][neighbor])
+            if callable(distance):
+                distance = distance()
+            if distance is None:
+                distance = 1.0
+
+        size = abs(node_val - neighbor_val) / distance
+        H.add_edge(node, neighbor, size=size)
+
     return H
+
+
+def _bind_time_node_value(scalar_field_value, t):
+    if callable(scalar_field_value):
+        try:
+            params = [
+                p
+                for p in inspect.signature(scalar_field_value).parameters.values()
+                if p.kind
+                in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+                and p.default is inspect.Parameter.empty
+            ]
+            num_pos = len(params)
+        except (ValueError, TypeError):
+            num_pos = None
+
+        if num_pos == 1:
+            return lambda n, d: scalar_field_value(t)
+        elif num_pos == 2:
+            return lambda n, d: scalar_field_value(n, t)
+        elif num_pos == 3:
+            return lambda n, d: scalar_field_value(n, d, t)
+        else:
+            def val_func(n, d):
+                try:
+                    return scalar_field_value(n, d, t)
+                except TypeError:
+                    try:
+                        return scalar_field_value(n, t)
+                    except TypeError:
+                        try:
+                            return scalar_field_value(t)
+                        except TypeError:
+                            return scalar_field_value(n, d)
+
+            return val_func
+
+    def val_func_from_attr(node, data):
+        val = data.get(scalar_field_value, 0)
+        if isinstance(val, dict):
+            return val.get(t, 0)
+        if callable(val):
+            try:
+                return val(t)
+            except TypeError:
+                return val()
+        return val
+
+    return val_func_from_attr
+
+
+def _bind_time_edge_distance(distance, t):
+    if callable(distance):
+        try:
+            params = [
+                p
+                for p in inspect.signature(distance).parameters.values()
+                if p.kind
+                in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+                and p.default is inspect.Parameter.empty
+            ]
+            num_pos = len(params)
+        except (ValueError, TypeError):
+            num_pos = None
+
+        if num_pos == 1:
+            return lambda u, v, d: distance(t)
+        elif num_pos == 3:
+            return lambda u, v, d: distance(u, v, t)
+        elif num_pos == 4:
+            return lambda u, v, d: distance(u, v, d, t)
+        else:
+            def dist_func(u, v, d):
+                try:
+                    return distance(u, v, d, t)
+                except TypeError:
+                    try:
+                        return distance(u, v, t)
+                    except TypeError:
+                        try:
+                            return distance(t)
+                        except TypeError:
+                            return distance(u, v, d)
+
+            return dist_func
+
+    def dist_func_from_attr(u, v, data):
+        val = data.get(distance, 1.0)
+        if isinstance(val, dict):
+            return val.get(t, 1.0)
+        if callable(val):
+            try:
+                return val(t)
+            except TypeError:
+                return val()
+        return val if val is not None else 1.0
+
+    return dist_func_from_attr
+
+
+@not_implemented_for("directed")
+@not_implemented_for("multigraph")
+@nx._dispatchable(
+    node_attrs="scalar_field_value", edge_attrs="scalar_field_distance"
+)
+def gradient_network_sequence(
+    G,
+    times,
+    scalar_field_value: str | Callable = "value",
+    scalar_field_distance: str | Callable = "distance",
+    ascending: bool = True,
+):
+    r"""Yields time-synchronized gradient network snapshots over an iterable of times.
+
+    In dynamic network systems, node potentials and edge distances may evolve over
+    time due to flow, sources, and sinks on the network [1]_, [2]_. For each time
+    step $t$ in `times`, this generator synchronizes the potential field across all
+    nodes and edges to time $t$ and yields the pair ``(t, H_t)``, where $H_t$ is
+    the directed gradient network snapshot at that time.
+
+    The yielded graph $H_t$ also stores the timestamp in its graph attributes
+    dict as ``H_t.graph["time"] = t``.
+
+    Parameters
+    ----------
+    G : NetworkX Graph
+        Substrate network graph. Does not support directed graphs and multigraphs.
+    times : Iterable
+        An iterable of time points (e.g. integers, floats, or timestamps) at which
+        to evaluate the gradient network.
+    scalar_field_value : str or Callable, default 'value'
+        Source of each node's scalar field value across time.
+        If a callable, it may accept ``(node, data, t)``, ``(node, t)``, or ``(t)``.
+        If a string, node attribute values may be a dictionary mapping time $t$ to
+        a scalar value, a callable accepting time $t$, or a static value.
+    scalar_field_distance : str or Callable, default 'distance'
+        Source of edge distance across time.
+        If a callable, it may accept ``(u, v, data, t)``, ``(u, v, t)``, or ``(t)``.
+        If a string, edge attribute values may be a dictionary mapping time $t$ to
+        a distance, a callable accepting time $t$, or a static value.
+    ascending : bool, default True
+        Choose an ascending (True) or descending (False) gradient graph.
+
+    Yields
+    ------
+    t : object
+        The current time point from `times`.
+    H : NetworkX DiGraph
+        The gradient network snapshot at time $t$.
+
+    Examples
+    --------
+    Simulate a network where the peak potential moves over time:
+
+    >>> G = nx.star_graph(2)
+    >>> potentials = {
+    ...     0: {0: 10.0, 1: 0.0},
+    ...     1: {0: 1.0, 1: 5.0},
+    ...     2: {0: 2.0, 1: 2.0},
+    ... }
+    >>> nx.set_node_attributes(G, potentials, "value")
+    >>> snapshots = list(nx.gradient_network_sequence(G, times=[0, 1]))
+    >>> snapshots[0][0]
+    0
+    >>> sorted(snapshots[0][1].edges())
+    [(0, 0), (1, 0), (2, 0)]
+    >>> snapshots[1][0]
+    1
+    >>> sorted(snapshots[1][1].edges())
+    [(0, 1), (1, 1), (2, 2)]
+
+    References
+    ----------
+    .. [1] Toroczkai, Zoltán; Kozma, Balázs; Bassler, Kevin E; Hengartner, N W;
+           Korniss, G (2008-04-02).
+           "Gradient networks". Journal of Physics A: Mathematical and Theoretical.
+           IOP Publishing. 41 (15): 155103. arXiv:cond-mat/0408262.
+           https://doi.org/10.1088/1751-8113/41/15/155103
+    .. [2] Danila, Bogdan; Yu, Yong; Earl, Samuel; Marsh, John A.; Toroczkai, Zoltán;
+           Bassler, Kevin E. (2006-10-19).
+           "Congestion-gradient driven transport on complex networks".
+           Physical Review E. 74 (4): 046114. arXiv:cond-mat/0603861.
+           https://doi.org/10.1103/physreve.74.046114
+    """
+    for t in times:
+        val_func = _bind_time_node_value(scalar_field_value, t)
+        dist_func = _bind_time_edge_distance(scalar_field_distance, t)
+        H = gradient_network(
+            G,
+            scalar_field_value=val_func,
+            scalar_field_distance=dist_func,
+            ascending=ascending,
+        )
+        H.graph["time"] = t
+        yield t, H
