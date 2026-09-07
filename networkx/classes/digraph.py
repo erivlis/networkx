@@ -1,4 +1,5 @@
 """Base class for directed graphs."""
+
 from copy import deepcopy
 from functools import cached_property
 
@@ -13,7 +14,6 @@ from networkx.classes.reportviews import (
     OutDegreeView,
     OutEdgeView,
 )
-from networkx.exception import NetworkXError
 
 __all__ = ["DiGraph"]
 
@@ -24,6 +24,9 @@ class _CachedPropertyResetterAdjAndSucc:
     The cached properties `adj` and `succ` are reset whenever `_adj` or `_succ`
     are set to new objects. In addition, the attributes `_succ` and `_adj`
     are synced so these two names point to the same object.
+
+    Warning: most of the time, when ``G._adj`` is set, ``G._pred`` should also
+    be set to maintain a valid data structure. They share datadicts.
 
     This object sits on a class and ensures that any instance of that
     class clears its cached properties "succ" and "adj" whenever the
@@ -39,10 +42,18 @@ class _CachedPropertyResetterAdjAndSucc:
         od["_adj"] = value
         od["_succ"] = value
         # reset cached properties
-        if "adj" in od:
-            del od["adj"]
-        if "succ" in od:
-            del od["succ"]
+        props = [
+            "adj",
+            "succ",
+            "edges",
+            "out_edges",
+            "degree",
+            "out_degree",
+            "in_degree",
+        ]
+        for prop in props:
+            if prop in od:
+                del od[prop]
 
 
 class _CachedPropertyResetterPred:
@@ -50,6 +61,9 @@ class _CachedPropertyResetterPred:
 
     This assumes that the ``cached_property`` ``G.pred`` should be reset whenever
     ``G._pred`` is set to a new value.
+
+    Warning: most of the time, when ``G._pred`` is set, ``G._adj`` should also
+    be set to maintain a valid data structure. They share datadicts.
 
     This object sits on a class and ensures that any instance of that
     class clears its cached property "pred" whenever the underlying
@@ -63,8 +77,11 @@ class _CachedPropertyResetterPred:
     def __set__(self, obj, value):
         od = obj.__dict__
         od["_pred"] = value
-        if "pred" in od:
-            del od["pred"]
+        # reset cached properties
+        props = ["pred", "in_edges", "degree", "out_degree", "in_degree"]
+        for prop in props:
+            if prop in od:
+                del od[prop]
 
 
 class DiGraph(Graph):
@@ -313,6 +330,16 @@ class DiGraph(Graph):
     _succ = _adj  # type: ignore[has-type]
     _pred = _CachedPropertyResetterPred()
 
+    # This __new__ method just does what Python itself does automatically.
+    # We include it here as part of the dispatchable/backend interface.
+    # If your goal is to understand how the graph classes work, you can ignore
+    # this method, even when subclassing the base classes. If you are subclassing
+    # in order to provide a backend that allows class instantiation, this method
+    # can be overridden to return your own backend graph class.
+    @nx._dispatchable(name="digraph__new__", graphs=None, returns_graph=True)
+    def __new__(cls, *args, **kwargs):
+        return object.__new__(cls)
+
     def __init__(self, incoming_graph_data=None, **attr):
         """Initialize a graph with edges, name, or graph attributes.
 
@@ -355,10 +382,12 @@ class DiGraph(Graph):
         self._pred = self.adjlist_outer_dict_factory()  # predecessor
         # Note: self._succ = self._adj  # successor
 
+        self.__networkx_cache__ = {}
         # attempt to load graph with data
         if incoming_graph_data is not None:
             convert.to_networkx_graph(incoming_graph_data, create_using=self)
         # load graph attributes (must be after convert)
+        attr.pop("backend", None)  # Ignore explicit `backend="networkx"`
         self.graph.update(attr)
 
     @cached_property
@@ -465,6 +494,7 @@ class DiGraph(Graph):
             attr_dict.update(attr)
         else:  # update attr even if node already exists
             self._node[node_for_adding].update(attr)
+        nx._clear_cache(self)
 
     def add_nodes_from(self, nodes_for_adding, **attr):
         """Add multiple nodes.
@@ -543,6 +573,7 @@ class DiGraph(Graph):
                 self._pred[n] = self.adjlist_inner_dict_factory()
                 self._node[n] = self.node_attr_dict_factory()
             self._node[n].update(newdict)
+        nx._clear_cache(self)
 
     def remove_node(self, n):
         """Remove node n.
@@ -578,13 +609,14 @@ class DiGraph(Graph):
             nbrs = self._succ[n]
             del self._node[n]
         except KeyError as err:  # NetworkXError if n not in self
-            raise NetworkXError(f"The node {n} is not in the digraph.") from err
+            raise nx.NetworkXError(f"The node {n} is not in the digraph.") from err
         for u in nbrs:
             del self._pred[u][n]  # remove all edges n-u in digraph
         del self._succ[n]  # remove node from succ
         for u in self._pred[n]:
             del self._succ[u][n]  # remove all edges n-u in digraph
         del self._pred[n]  # remove node from pred
+        nx._clear_cache(self)
 
     def remove_nodes_from(self, nodes):
         """Remove multiple nodes.
@@ -639,6 +671,7 @@ class DiGraph(Graph):
                 del self._pred[n]  # now remove node
             except KeyError:
                 pass  # silent failure on remove
+        nx._clear_cache(self)
 
     def add_edge(self, u_of_edge, v_of_edge, **attr):
         """Add an edge between u and v.
@@ -709,6 +742,7 @@ class DiGraph(Graph):
         datadict.update(attr)
         self._succ[u][v] = datadict
         self._pred[v][u] = datadict
+        nx._clear_cache(self)
 
     def add_edges_from(self, ebunch_to_add, **attr):
         """Add all the edges in ebunch_to_add.
@@ -773,7 +807,7 @@ class DiGraph(Graph):
                 u, v = e
                 dd = {}
             else:
-                raise NetworkXError(f"Edge tuple {e} must be a 2-tuple or 3-tuple.")
+                raise nx.NetworkXError(f"Edge tuple {e} must be a 2-tuple or 3-tuple.")
             if u not in self._succ:
                 if u is None:
                     raise ValueError("None cannot be a node")
@@ -791,6 +825,7 @@ class DiGraph(Graph):
             datadict.update(dd)
             self._succ[u][v] = datadict
             self._pred[v][u] = datadict
+        nx._clear_cache(self)
 
     def remove_edge(self, u, v):
         """Remove the edge between u and v.
@@ -823,7 +858,8 @@ class DiGraph(Graph):
             del self._succ[u][v]
             del self._pred[v][u]
         except KeyError as err:
-            raise NetworkXError(f"The edge {u}-{v} not in graph.") from err
+            raise nx.NetworkXError(f"The edge {u}-{v} not in graph.") from err
+        nx._clear_cache(self)
 
     def remove_edges_from(self, ebunch):
         """Remove all edges specified in ebunch.
@@ -856,6 +892,7 @@ class DiGraph(Graph):
             if u in self._succ and v in self._succ[u]:
                 del self._succ[u][v]
                 del self._pred[v][u]
+        nx._clear_cache(self)
 
     def has_successor(self, u, v):
         """Returns True if node u has successor v.
@@ -898,7 +935,7 @@ class DiGraph(Graph):
         try:
             return iter(self._succ[n])
         except KeyError as err:
-            raise NetworkXError(f"The node {n} is not in the digraph.") from err
+            raise nx.NetworkXError(f"The node {n} is not in the digraph.") from err
 
     # digraph definitions
     neighbors = successors
@@ -926,7 +963,7 @@ class DiGraph(Graph):
         try:
             return iter(self._pred[n])
         except KeyError as err:
-            raise NetworkXError(f"The node {n} is not in the digraph.") from err
+            raise nx.NetworkXError(f"The node {n} is not in the digraph.") from err
 
     @cached_property
     def edges(self):
@@ -1076,8 +1113,8 @@ class DiGraph(Graph):
         >>> nx.add_path(G, [0, 1, 2, 3])
         >>> G.degree(0)  # node 0 with degree 1
         1
-        >>> list(G.degree([0, 1, 2]))
-        [(0, 1), (1, 2), (2, 2)]
+        >>> dict(G.degree([0, 1, 2]))
+        {0: 1, 1: 2, 2: 2}
 
         """
         return DiDegreeView(self)
@@ -1123,8 +1160,8 @@ class DiGraph(Graph):
         >>> nx.add_path(G, [0, 1, 2, 3])
         >>> G.in_degree(0)  # node 0 with degree 0
         0
-        >>> list(G.in_degree([0, 1, 2]))
-        [(0, 0), (1, 1), (2, 1)]
+        >>> dict(G.in_degree([0, 1, 2]))
+        {0: 0, 1: 1, 2: 1}
 
         """
         return InDegreeView(self)
@@ -1170,8 +1207,8 @@ class DiGraph(Graph):
         >>> nx.add_path(G, [0, 1, 2, 3])
         >>> G.out_degree(0)  # node 0 with degree 1
         1
-        >>> list(G.out_degree([0, 1, 2]))
-        [(0, 1), (1, 1), (2, 1)]
+        >>> dict(G.out_degree([0, 1, 2]))
+        {0: 1, 1: 1, 2: 1}
 
         """
         return OutDegreeView(self)
@@ -1195,6 +1232,7 @@ class DiGraph(Graph):
         self._pred.clear()
         self._node.clear()
         self.graph.clear()
+        nx._clear_cache(self)
 
     def clear_edges(self):
         """Remove all edges from the graph without altering nodes.
@@ -1213,6 +1251,7 @@ class DiGraph(Graph):
             predecessor_dict.clear()
         for successor_dict in self._succ.values():
             successor_dict.clear()
+        nx._clear_cache(self)
 
     def is_multigraph(self):
         """Returns True if graph is a multigraph, False otherwise."""

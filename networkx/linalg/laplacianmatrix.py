@@ -1,21 +1,22 @@
 """Laplacian matrix of graphs.
 
-All calculations here are done using the out-degree. For Laplacians 
-using in-degree, us `G.reverse(copy=False)` instead of `G`.
+All calculations here are done using the out-degree. For Laplacians using
+in-degree, use `G.reverse(copy=False)` instead of `G` and take the transpose.
 
-The `laplacian_matrix` function provides an unnormalized matrix, 
-while `normalized_laplacian_matrix`, `directed_laplacian_matrix`, 
+The `laplacian_matrix` function provides an unnormalized matrix,
+while `normalized_laplacian_matrix`, `directed_laplacian_matrix`,
 and `directed_combinatorial_laplacian_matrix` are all normalized.
 """
+
 import networkx as nx
 from networkx.utils import not_implemented_for
 
 __all__ = [
     "laplacian_matrix",
     "normalized_laplacian_matrix",
-    "total_spanning_tree_weight",
     "directed_laplacian_matrix",
     "directed_combinatorial_laplacian_matrix",
+    "magnetic_laplacian_matrix",
 ]
 
 
@@ -53,7 +54,8 @@ def laplacian_matrix(G, nodelist=None, weight="weight"):
     or `directed_combinatorial_laplacian_matrix`.
 
     This calculation uses the out-degree of the graph `G`. To use the
-    in-degree for calculations instead, use `G.reverse(copy=False)` instead.
+    in-degree for calculations instead, use `G.reverse(copy=False)` and
+    take the transpose.
 
     See Also
     --------
@@ -90,11 +92,26 @@ def laplacian_matrix(G, nodelist=None, weight="weight"):
      [-1  2 -1  0]
      [ 0  0  1 -1]
      [ 0  0 -1  1]]
-    >>> G = nx.Graph(DiG)
-    >>> print(nx.laplacian_matrix(G).toarray())
+
+    Notice that node 4 is represented by the third column and row. This is because
+    by default the row/column order is the order of `G.nodes` (i.e. the node added
+    order -- in the edgelist, 4 first appears in (2, 4), before node 3 in edge (4, 3).)
+    To control the node order of the matrix, use the `nodelist` argument.
+
+    >>> print(nx.laplacian_matrix(DiG, nodelist=[1, 2, 3, 4]).toarray())
     [[ 1 -1  0  0]
-     [-1  2 -1  0]
-     [ 0 -1  2 -1]
+     [-1  2  0 -1]
+     [ 0  0  1 -1]
+     [ 0  0 -1  1]]
+
+    This calculation uses the out-degree of the graph `G`. To use the
+    in-degree for calculations instead, use `G.reverse(copy=False)` and
+    take the transpose.
+
+    >>> print(nx.laplacian_matrix(DiG.reverse(copy=False)).toarray().T)
+    [[ 1 -1  0  0]
+     [-1  1 -1  0]
+     [ 0  0  2 -1]
      [ 0  0 -1  1]]
 
     References
@@ -109,8 +126,7 @@ def laplacian_matrix(G, nodelist=None, weight="weight"):
         nodelist = list(G)
     A = nx.to_scipy_sparse_array(G, nodelist=nodelist, weight=weight, format="csr")
     n, m = A.shape
-    # TODO: rm csr_array wrapper when spdiags can produce arrays
-    D = sp.sparse.csr_array(sp.sparse.spdiags(A.sum(axis=1), 0, m, n, format="csr"))
+    D = sp.sparse.dia_array((A.sum(axis=1), 0), shape=(m, n)).tocsr()
     return D - A
 
 
@@ -154,7 +170,8 @@ def normalized_laplacian_matrix(G, nodelist=None, weight="weight"):
     the adjacency matrix [2]_.
 
     This calculation uses the out-degree of the graph `G`. To use the
-    in-degree for calculations instead, use `G.reverse(copy=False)` instead.
+    in-degree for calculations instead, use `G.reverse(copy=False)` and
+    take the transpose.
 
     For an unnormalized output, use `laplacian_matrix`.
 
@@ -162,7 +179,6 @@ def normalized_laplacian_matrix(G, nodelist=None, weight="weight"):
     --------
 
     >>> import numpy as np
-    >>> np.set_printoptions(precision=4)  # To print with lower precision
     >>> edges = [
     ...     (1, 2),
     ...     (2, 1),
@@ -172,16 +188,27 @@ def normalized_laplacian_matrix(G, nodelist=None, weight="weight"):
     ... ]
     >>> DiG = nx.DiGraph(edges)
     >>> print(nx.normalized_laplacian_matrix(DiG).toarray())
-    [[ 1.     -0.7071  0.      0.    ]
-     [-0.7071  1.     -0.7071  0.    ]
-     [ 0.      0.      1.     -1.    ]
-     [ 0.      0.     -1.      1.    ]]
-    >>> G = nx.Graph(DiG)
+    [[ 1.         -0.70710678  0.          0.        ]
+     [-0.70710678  1.         -0.70710678  0.        ]
+     [ 0.          0.          1.         -1.        ]
+     [ 0.          0.         -1.          1.        ]]
+
+    Notice that node 4 is represented by the third column and row. This is because
+    by default the row/column order is the order of `G.nodes` (i.e. the node added
+    order -- in the edgelist, 4 first appears in (2, 4), before node 3 in edge (4, 3).)
+    To control the node order of the matrix, use the `nodelist` argument.
+
+    >>> print(nx.normalized_laplacian_matrix(DiG, nodelist=[1, 2, 3, 4]).toarray())
+    [[ 1.         -0.70710678  0.          0.        ]
+     [-0.70710678  1.          0.         -0.70710678]
+     [ 0.          0.          1.         -1.        ]
+     [ 0.          0.         -1.          1.        ]]
+    >>> G = nx.Graph(edges)
     >>> print(nx.normalized_laplacian_matrix(G).toarray())
-    [[ 1.     -0.7071  0.      0.    ]
-     [-0.7071  1.     -0.5     0.    ]
-     [ 0.     -0.5     1.     -0.7071]
-     [ 0.      0.     -0.7071  1.    ]]
+    [[ 1.         -0.70710678  0.          0.        ]
+     [-0.70710678  1.         -0.5         0.        ]
+     [ 0.         -0.5         1.         -0.70710678]
+     [ 0.          0.         -0.70710678  1.        ]]
 
     See Also
     --------
@@ -206,50 +233,172 @@ def normalized_laplacian_matrix(G, nodelist=None, weight="weight"):
     if nodelist is None:
         nodelist = list(G)
     A = nx.to_scipy_sparse_array(G, nodelist=nodelist, weight=weight, format="csr")
-    n, m = A.shape
+    n, _ = A.shape
     diags = A.sum(axis=1)
-    # TODO: rm csr_array wrapper when spdiags can produce arrays
-    D = sp.sparse.csr_array(sp.sparse.spdiags(diags, 0, m, n, format="csr"))
+    D = sp.sparse.dia_array((diags, 0), shape=(n, n)).tocsr()
     L = D - A
     with np.errstate(divide="ignore"):
         diags_sqrt = 1.0 / np.sqrt(diags)
     diags_sqrt[np.isinf(diags_sqrt)] = 0
-    # TODO: rm csr_array wrapper when spdiags can produce arrays
-    DH = sp.sparse.csr_array(sp.sparse.spdiags(diags_sqrt, 0, m, n, format="csr"))
+    DH = sp.sparse.dia_array((diags_sqrt, 0), shape=(n, n)).tocsr()
     return DH @ (L @ DH)
 
 
+@not_implemented_for("multigraph")
+@not_implemented_for("undirected")
 @nx._dispatchable(edge_attrs="weight")
-def total_spanning_tree_weight(G, weight=None):
-    """
-    Returns the total weight of all spanning trees of `G`.
+def magnetic_laplacian_matrix(
+    G, *, nodelist=None, normalized=False, q=0.25, weight="weight"
+):
+    r"""Returns the magnetic Laplacian matrix of DiGraph G.
 
-    Kirchoff's Tree Matrix Theorem states that the determinant of any cofactor of the
-    Laplacian matrix of a graph is the number of spanning trees in the graph. For a
-    weighted Laplacian matrix, it is the sum across all spanning trees of the
-    multiplicative weight of each tree. That is, the weight of each tree is the
-    product of its edge weights.
+    The magnetic Laplacian matrix (also called the q-magnetic Laplacian) is a
+    Hermitian matrix for directed graphs that encodes edge directionality
+    via complex phases [1]_.
+
+    Given a weighted directed graph, :math:`G = (V, E, W)`, with :math:`W`
+    the weighted adjacency matrix, the symmetrized weighted adjacency
+    matrix is defined as :math:`W' = 0.5 (W + W^{T})`. A skew-symmetric term
+    :math:`\delta` is introduced to encode directionality, where
+
+    ..math::
+        \delta_{jk} = \begin{cases}
+            +1 & \text{if} j \to k \text{ is an edge and } k \to j \text{ is not}, \\
+            -1 & \text{if} k \to j \text{ is an edge and } j \to k \text{ is not}, \\
+            0 & \text{if both or neither edge is present.}
+            \end{cases}
+
+    Then, the magnetic Laplacian matrix is defined as:
+
+    .. math::
+        L^{(q)} := D - H^{(q)}
+
+    where :math:`H^{(q)}` is the Hermitian adjacency matrix with entries
+    :math:`H^{(q)}_{jk} = W'_{jk} e^{2\pi i q \delta_{jk}}`, and :math:`D` is the
+    degree matrix associated with the symmetrized weight adjacency matrix :math:`W'`.
+
+    If `normalized` is True, compute the normalized version using the Moore-Penrose
+    inverse :math:`D^{+}}` of the degree matrix :math:`D`. The normalized formula
+    is then:
+
+    .. math::
+        L^{(q)}_{norm} = (D^{+})^{0.5} L^{(q)} (D^{+})^{0.5}
 
     Parameters
     ----------
-    G : NetworkX Graph
-        The graph to use Kirchhoff's theorem on.
+    G : DiGraph
+        A directed graph
 
-    weight : string or None
-        The key for the edge attribute holding the edge weight. If `None`, then
-        each edge is assumed to have a weight of 1 and this function returns the
-        total number of spanning trees in `G`.
+    nodelist : list, optional (default=list(G))
+        Node ordering for row/columns.
+
+    normalized : bool, optional (default=False)
+        Bool that encodes if return the magnetic Laplacian or the normalized magnetic
+        Laplacian. If True returns the normalized version.
+
+    q : float, optional (default=0.25)
+        The phase of the magnetic potential is the charge parameter 0 <= q <= 0.5.
+        At q=0 returns the standard Laplacian.
+
+    weight : string or None, optional (default='weight')
+        Edge attribute key for weights. If None, all edges have weight 1.
 
     Returns
     -------
-    float
-        The sum of the total multiplicative weights for all spanning trees in `G`
-    """
-    import numpy as np
+    L : SciPy sparse array (complex dtype)
+        The magnetic Laplacian matrix of `G` if not `normalized`
+        and the normalized version if `normalized`
 
-    G_laplacian = nx.laplacian_matrix(G, weight=weight).toarray()
-    # Determinant ignoring first row and column
-    return abs(np.linalg.det(G_laplacian[1:, 1:]))
+    Raises
+    ------
+    ValueError
+        If q is not between 0 and 0.5
+
+    NetworkXNotImplemented
+        If `G` is undirected or a multigraph
+
+    References
+    ----------
+    .. [1] Fanuel, M., Alaíz, C. M., Fernández, Á., & Suykens, J. A. (2018).
+       Magnetic eigenmaps for the visualization of directed graphs.
+       Applied and Computational Harmonic Analysis, 44(1), 189–199.
+       <https://doi.org/10.1016/j.acha.2017.01.004>
+    """
+    from collections import defaultdict
+
+    import numpy as np
+    import scipy as sp
+
+    if nodelist is None:
+        nodelist = list(G)
+
+    # Build Hermitian adjacency H
+    n = len(nodelist)
+    node_index = {v: i for i, v in enumerate(nodelist)}
+
+    if not (0 <= q <= 0.5):
+        raise ValueError("Parameter q must be a value between 0 and 0.5")
+
+    phase = 2 * np.pi * q
+
+    # Find "phase" matrix
+    # Dict to encode where have been added symetries
+    delta_phase_edge = defaultdict(int)
+    matrix_weights = defaultdict(float)
+
+    phases = {1: np.exp(1j * phase), -1: np.exp(-1j * phase), 0: 1}
+
+    for u, v, wt in G.edges(data=weight, default=1):
+        if u not in node_index or v not in node_index:
+            continue
+
+        ui, vi = node_index[u], node_index[v]
+        delta_phase_edge[(ui, vi)] += 1
+        delta_phase_edge[(vi, ui)] -= 1
+        matrix_weights[(ui, vi)] += 0.5 * wt
+        matrix_weights[(vi, ui)] += 0.5 * wt
+
+    rows, cols, data = [], [], []
+    for u, v in G.edges():
+        if u not in node_index or v not in node_index:
+            continue
+
+        ui, vi = node_index[u], node_index[v]
+        if ui != vi:
+            if delta_phase_edge[(ui, vi)] == 0:
+                rows.append(ui)
+                cols.append(vi)
+                data.append(matrix_weights[(ui, vi)])
+            else:
+                rows.append(ui)
+                cols.append(vi)
+                data.append(
+                    matrix_weights[(ui, vi)] * phases[delta_phase_edge[(ui, vi)]]
+                )
+                rows.append(vi)
+                cols.append(ui)
+                data.append(
+                    matrix_weights[(vi, ui)] * phases[delta_phase_edge[(vi, ui)]]
+                )
+
+    H = sp.sparse.csr_array((data, (rows, cols)), shape=(n, n), dtype=complex)
+
+    # Build degree matrix D
+    diags = np.abs(H).sum(axis=1).ravel()
+
+    if normalized:
+        with np.errstate(divide="ignore"):
+            diags_sqrt = 1.0 / np.sqrt(diags)
+        diags_sqrt[np.isinf(diags_sqrt)] = 0
+        DH = sp.sparse.dia_array((diags_sqrt, 0), shape=(n, n)).tocsr()
+        H = DH @ (H @ DH)
+        diags = np.ones(
+            n,
+        )
+
+    D = sp.sparse.dia_array((diags, 0), shape=(n, n), dtype=complex).tocsr()
+
+    return D - H
 
 
 ###############################################################################
@@ -313,7 +462,8 @@ def directed_laplacian_matrix(
     The result is always a symmetric matrix.
 
     This calculation uses the out-degree of the graph `G`. To use the
-    in-degree for calculations instead, use `G.reverse(copy=False)` instead.
+    in-degree for calculations instead, use `G.reverse(copy=False)` and
+    take the transpose.
 
     See Also
     --------
@@ -343,11 +493,9 @@ def directed_laplacian_matrix(
     # p>=0 by Perron-Frobenius Thm. Use abs() to fix roundoff across zero gh-6865
     sqrtp = np.sqrt(np.abs(p))
     Q = (
-        # TODO: rm csr_array wrapper when spdiags creates arrays
-        sp.sparse.csr_array(sp.sparse.spdiags(sqrtp, 0, n, n))
+        sp.sparse.dia_array((sqrtp, 0), shape=(n, n)).tocsr()
         @ P
-        # TODO: rm csr_array wrapper when spdiags creates arrays
-        @ sp.sparse.csr_array(sp.sparse.spdiags(1.0 / sqrtp, 0, n, n))
+        @ sp.sparse.dia_array((1.0 / sqrtp, 0), shape=(n, n)).tocsr()
     )
     # NOTE: This could be sparsified for the non-pagerank cases
     I = np.identity(len(G))
@@ -411,7 +559,8 @@ def directed_combinatorial_laplacian_matrix(
     The result is always a symmetric matrix.
 
     This calculation uses the out-degree of the graph `G`. To use the
-    in-degree for calculations instead, use `G.reverse(copy=False)` instead.
+    in-degree for calculations instead, use `G.reverse(copy=False)` and
+    take the transpose.
 
     See Also
     --------
@@ -437,8 +586,7 @@ def directed_combinatorial_laplacian_matrix(
     v = evecs.flatten().real
     p = v / v.sum()
     # NOTE: could be improved by not densifying
-    # TODO: Rm csr_array wrapper when spdiags array creation becomes available
-    Phi = sp.sparse.csr_array(sp.sparse.spdiags(p, 0, n, n)).toarray()
+    Phi = sp.sparse.dia_array((p, 0), shape=(n, n)).toarray()
 
     return Phi - (Phi @ P + P.T @ Phi) / 2.0
 
@@ -499,13 +647,11 @@ def _transition_matrix(G, nodelist=None, weight="weight", walk_type=None, alpha=
     A = nx.to_scipy_sparse_array(G, nodelist=nodelist, weight=weight, dtype=float)
     n, m = A.shape
     if walk_type in ["random", "lazy"]:
-        # TODO: Rm csr_array wrapper when spdiags array creation becomes available
-        DI = sp.sparse.csr_array(sp.sparse.spdiags(1.0 / A.sum(axis=1), 0, n, n))
+        DI = sp.sparse.dia_array((1.0 / A.sum(axis=1), 0), shape=(n, n)).tocsr()
         if walk_type == "random":
             P = DI @ A
         else:
-            # TODO: Rm csr_array wrapper when identity array creation becomes available
-            I = sp.sparse.csr_array(sp.sparse.identity(n))
+            I = sp.sparse.eye_array(n, format="csr")
             P = (I + DI @ A) / 2.0
 
     elif walk_type == "pagerank":

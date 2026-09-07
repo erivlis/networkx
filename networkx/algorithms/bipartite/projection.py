@@ -1,6 +1,6 @@
 """One-mode (unipartite) projections of bipartite graphs."""
+
 import networkx as nx
-from networkx.exception import NetworkXAlgorithmError
 from networkx.utils import not_implemented_for
 
 __all__ = [
@@ -12,7 +12,9 @@ __all__ = [
 ]
 
 
-@nx._dispatchable(graphs="B", preserve_node_attrs=True, preserve_graph_attrs=True)
+@nx._dispatchable(
+    graphs="B", preserve_node_attrs=True, preserve_graph_attrs=True, returns_graph=True
+)
 def projected_graph(B, nodes, multigraph=False):
     r"""Returns the projection of B onto one of its node sets.
 
@@ -117,7 +119,7 @@ def projected_graph(B, nodes, multigraph=False):
 
 
 @not_implemented_for("multigraph")
-@nx._dispatchable(graphs="B")
+@nx._dispatchable(graphs="B", returns_graph=True)
 def weighted_projected_graph(B, nodes, ratio=False):
     r"""Returns a weighted projection of B onto one of its node sets.
 
@@ -198,7 +200,7 @@ def weighted_projected_graph(B, nodes, ratio=False):
     n_top = len(B) - len(nodes)
 
     if n_top < 1:
-        raise NetworkXAlgorithmError(
+        raise nx.NetworkXAlgorithmError(
             f"the size of the nodes to project onto ({len(nodes)}) is >= the graph size ({len(B)}).\n"
             "They are either not a valid bipartite partition or contain duplicates"
         )
@@ -218,7 +220,7 @@ def weighted_projected_graph(B, nodes, ratio=False):
 
 
 @not_implemented_for("multigraph")
-@nx._dispatchable(graphs="B")
+@nx._dispatchable(graphs="B", returns_graph=True)
 def collaboration_weighted_projected_graph(B, nodes):
     r"""Newman's weighted projection of B onto one of its node sets.
 
@@ -312,7 +314,7 @@ def collaboration_weighted_projected_graph(B, nodes):
 
 
 @not_implemented_for("multigraph")
-@nx._dispatchable(graphs="B")
+@nx._dispatchable(graphs="B", returns_graph=True)
 def overlap_weighted_projected_graph(B, nodes, jaccard=True):
     r"""Overlap weighted projection of B onto one of its node sets.
 
@@ -412,7 +414,7 @@ def overlap_weighted_projected_graph(B, nodes, jaccard=True):
 
 
 @not_implemented_for("multigraph")
-@nx._dispatchable(graphs="B", preserve_all_attrs=True)
+@nx._dispatchable(graphs="B", preserve_all_attrs=True, returns_graph=True)
 def generic_weighted_projected_graph(B, nodes, weight_function=None):
     r"""Weighted projection of B with a user-specified weight function.
 
@@ -471,10 +473,14 @@ def generic_weighted_projected_graph(B, nodes, weight_function=None):
     >>> print(list(G.edges(data=True)))
     [(0, 1, {'weight': 2})]
     >>> # To specify a custom weight function use the weight_function parameter
-    >>> G = bipartite.generic_weighted_projected_graph(B, [0, 1], weight_function=jaccard)
+    >>> G = bipartite.generic_weighted_projected_graph(
+    ...     B, [0, 1], weight_function=jaccard
+    ... )
     >>> print(list(G.edges(data=True)))
     [(0, 1, {'weight': 1.0})]
-    >>> G = bipartite.generic_weighted_projected_graph(B, [0, 1], weight_function=my_weight)
+    >>> G = bipartite.generic_weighted_projected_graph(
+    ...     B, [0, 1], weight_function=my_weight
+    ... )
     >>> print(list(G.edges(data=True)))
     [(0, 1, {'weight': 10})]
 

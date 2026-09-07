@@ -7,6 +7,7 @@ Directed Acyclic Graphs
    :toctree: generated/
 
    ancestors
+   antichain_width
    descendants
    topological_sort
    topological_generations
@@ -21,4 +22,5 @@ Directed Acyclic Graphs
    dag_longest_path
    dag_longest_path_length
    dag_to_branching
-   compute_v_structures
+   colliders
+   v_structures

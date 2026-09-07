@@ -1,6 +1,7 @@
 """
 Flow based cut algorithms
 """
+
 import itertools
 
 import networkx as nx
@@ -9,9 +10,9 @@ import networkx as nx
 # cut algorithms.
 from networkx.algorithms.flow import build_residual_network, edmonds_karp
 
-default_flow_func = edmonds_karp
-
 from .utils import build_auxiliary_edge_connectivity, build_auxiliary_node_connectivity
+
+default_flow_func = edmonds_karp
 
 __all__ = [
     "minimum_st_node_cut",
@@ -22,12 +23,9 @@ __all__ = [
 
 
 @nx._dispatchable(
-    graphs={"G": 0, "auxiliary?": 4, "residual?": 5},
-    preserve_edge_attrs={
-        "auxiliary": {"capacity": float("inf")},
-        "residual": {"capacity": float("inf")},
-    },
-    preserve_graph_attrs={"auxiliary", "residual"},
+    graphs={"G": 0, "auxiliary?": 4},
+    preserve_edge_attrs={"auxiliary": {"capacity": float("inf")}},
+    preserve_graph_attrs={"auxiliary"},
 )
 def minimum_st_edge_cut(G, s, t, flow_func=None, auxiliary=None, residual=None):
     """Returns the edges of the cut-set of a minimum (s, t)-cut.
@@ -162,10 +160,9 @@ def minimum_st_edge_cut(G, s, t, flow_func=None, auxiliary=None, residual=None):
 
 
 @nx._dispatchable(
-    graphs={"G": 0, "auxiliary?": 4, "residual?": 5},
-    preserve_edge_attrs={"residual": {"capacity": float("inf")}},
+    graphs={"G": 0, "auxiliary?": 4},
     preserve_node_attrs={"auxiliary": {"id": None}},
-    preserve_graph_attrs={"auxiliary", "residual"},
+    preserve_graph_attrs={"auxiliary"},
 )
 def minimum_st_node_cut(G, s, t, flow_func=None, auxiliary=None, residual=None):
     r"""Returns a set of nodes of minimum cardinality that disconnect source
@@ -209,6 +206,12 @@ def minimum_st_node_cut(G, s, t, flow_func=None, auxiliary=None, residual=None):
     cutset : set
         Set of nodes that, if removed, would destroy all paths between
         source and target in G.
+
+        Returns an empty set if source and target are either in different
+        components or are joined by an edge from source to target, as no node
+        removal can destroy that path. In a digraph an edge from target to
+        source is not a source-target path, and does not stop source from
+        being separated from target [2]_.
 
     Examples
     --------
@@ -284,6 +287,11 @@ def minimum_st_node_cut(G, s, t, flow_func=None, auxiliary=None, residual=None):
     .. [1] Abdol-Hossein Esfahanian. Connectivity Algorithms.
         http://www.cse.msu.edu/~cse835/Papers/Graph_connectivity_revised.pdf
 
+    .. [2] Shimon Even and R. Endre Tarjan. Network Flow and Testing Graph
+        Connectivity. SIAM Journal on Computing, Volume 4, Issue 4,
+        pp. 507-518, 1975.
+        https://doi.org/10.1137/0204043
+
     """
     if auxiliary is None:
         H = build_auxiliary_node_connectivity(G)
@@ -293,8 +301,13 @@ def minimum_st_node_cut(G, s, t, flow_func=None, auxiliary=None, residual=None):
     mapping = H.graph.get("mapping", None)
     if mapping is None:
         raise nx.NetworkXError("Invalid auxiliary digraph.")
-    if G.has_edge(s, t) or G.has_edge(t, s):
-        return {}
+    # No set of nodes other than s and t can destroy a direct s-t edge. In a
+    # digraph an edge from t to s is irrelevant: it is not an s-t path, so s can
+    # still be separated from t. The footnote on page 513 of [2] skips the pair
+    # only in the direction of the edge, for this reason. `has_edge` is
+    # symmetric for undirected graphs.
+    if G.has_edge(s, t):
+        return set()
     kwargs = {"flow_func": flow_func, "residual": residual, "auxiliary": H}
 
     # The edge cut in the auxiliary digraph corresponds to the node cut in the
@@ -380,6 +393,9 @@ def minimum_node_cut(G, s=None, t=None, flow_func=None):
     and undirected graphs. This implementation is based on algorithm 11
     in [1]_.
 
+    A minimum node cut of a digraph separates an ordered pair of nodes,
+    and the two orders need not agree, so both are considered [2]_.
+
     See also
     --------
     :meth:`minimum_st_node_cut`
@@ -397,6 +413,11 @@ def minimum_node_cut(G, s=None, t=None, flow_func=None):
     ----------
     .. [1] Abdol-Hossein Esfahanian. Connectivity Algorithms.
         http://www.cse.msu.edu/~cse835/Papers/Graph_connectivity_revised.pdf
+
+    .. [2] Shimon Even and R. Endre Tarjan. Network Flow and Testing Graph
+        Connectivity. SIAM Journal on Computing, Volume 4, Issue 4,
+        pp. 507-518, 1975.
+        https://doi.org/10.1137/0204043
 
     """
     if (s is not None and t is None) or (s is None and t is not None):
@@ -420,28 +441,53 @@ def minimum_node_cut(G, s=None, t=None, flow_func=None):
         def neighbors(v):
             return itertools.chain.from_iterable([G.predecessors(v), G.successors(v)])
 
+        # Isolating a node only requires removing all its predecessors or all
+        # its successors, so the smaller of the two is the better cutset.
+        def isolating_cut(v):
+            return min(G.pred[v].keys() - {v}, G.succ[v].keys() - {v}, key=len)
+
+        # A minimum node cut of a digraph separates an ordered pair, and the
+        # two orders of a pair need not agree, so v has to lie on the source
+        # side of a minimum node cut for the cut between the pair to be the
+        # right one. Both orders are needed. Page 513 of [2] states that for a
+        # digraph both N(v, w) and N(w, v) have to be computed.
+        def ordered_pairs(v, w):
+            return ((v, w), (w, v))
+
     else:
         if not nx.is_connected(G):
             raise nx.NetworkXError("Input graph is not connected")
         iter_func = itertools.combinations
         neighbors = G.neighbors
 
+        def isolating_cut(v):
+            return G[v].keys() - {v}
+
+        def ordered_pairs(v, w):
+            return ((v, w),)
+
     # Reuse the auxiliary digraph and the residual network.
     H = build_auxiliary_node_connectivity(G)
     R = build_residual_network(H, "capacity")
     kwargs = {"flow_func": flow_func, "auxiliary": H, "residual": R}
 
-    # Choose a node with minimum degree.
-    v = min(G, key=G.degree)
-    # Initial node cutset is all neighbors of the node with minimum degree.
-    min_cut = set(G[v])
+    # Choose a node with minimum degree, and take the nodes that isolate it as
+    # the initial cutset. `G.degree` cannot be used here because parallel edges
+    # do not add connectivity and self-loops are irrelevant for it.
+    v, min_cut = min(((n, isolating_cut(n)) for n in G), key=lambda nc: len(nc[1]))
+    # Neighbors of v, excluding v itself if it has a self-loop. For digraphs
+    # this deduplicates the nodes that are both predecessors and successors.
+    v_nbrs = set(neighbors(v)) - {v}
     # Compute st node cuts between v and all its non-neighbors nodes in G.
-    for w in set(G) - set(neighbors(v)) - {v}:
-        this_cut = minimum_st_node_cut(G, v, w, **kwargs)
-        if len(min_cut) >= len(this_cut):
-            min_cut = this_cut
+    for w in set(G) - v_nbrs - {v}:
+        for s, t in ordered_pairs(v, w):
+            this_cut = minimum_st_node_cut(G, s, t, **kwargs)
+            if len(min_cut) >= len(this_cut):
+                min_cut = this_cut
     # Also for non adjacent pairs of neighbors of v.
-    for x, y in iter_func(neighbors(v), 2):
+    for x, y in iter_func(v_nbrs, 2):
+        # `minimum_st_node_cut` returns an empty set when x and y cannot be
+        # separated, which must not be taken for a smaller cut.
         if y in G[x]:
             continue
         this_cut = minimum_st_node_cut(G, x, y, **kwargs)

@@ -1,7 +1,6 @@
 """Provides functions for computing the efficiency of nodes and graphs."""
 
 import networkx as nx
-from networkx.exception import NetworkXNoPath
 
 from ..utils import not_implemented_for
 
@@ -54,7 +53,7 @@ def efficiency(G, u, v):
     """
     try:
         eff = 1 / nx.shortest_path_length(G, u, v)
-    except NetworkXNoPath:
+    except nx.NetworkXNoPath:
         eff = 0
     return eff
 
@@ -163,6 +162,5 @@ def local_efficiency(G):
            <https://doi.org/10.1103/PhysRevLett.87.198701>
 
     """
-    # TODO This summation can be trivially parallelized.
     efficiency_list = (global_efficiency(G.subgraph(G[v])) for v in G)
     return sum(efficiency_list) / len(G)

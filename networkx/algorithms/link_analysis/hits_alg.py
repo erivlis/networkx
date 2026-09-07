@@ -1,12 +1,20 @@
-"""Hubs and authorities analysis of graph structure.
-"""
+"""Hubs and authorities analysis of graph structure."""
+
 import networkx as nx
 
 __all__ = ["hits"]
 
 
 @nx._dispatchable(preserve_edge_attrs={"G": {"weight": 1}})
-def hits(G, max_iter=100, tol=1.0e-8, nstart=None, normalized=True):
+def hits(
+    G,
+    max_iter=100,
+    tol=1.0e-8,
+    nstart=None,
+    normalized=True,
+    *,
+    method="power_iteration",
+):
     """Returns HITS hubs and authorities values for nodes.
 
     The HITS algorithm computes two numbers for a node.
@@ -30,6 +38,12 @@ def hits(G, max_iter=100, tol=1.0e-8, nstart=None, normalized=True):
     normalized : bool (default=True)
        Normalize results by the sum of all of the values.
 
+    method : string (default="power_iteration")
+       The implementation to use, one of "power_iteration" or "svd".
+       The "svd" method computes the values from the largest singular
+       value/vectors of the adjacency matrix using
+       ``scipy.sparse.linalg.svds``.
+
     Returns
     -------
     (hubs,authorities) : two-tuple of dictionaries
@@ -43,6 +57,9 @@ def hits(G, max_iter=100, tol=1.0e-8, nstart=None, normalized=True):
         within the specified number of iterations of the power iteration
         method.
 
+    ValueError
+        If `method` is not one of "power_iteration" or "svd".
+
     Examples
     --------
     >>> G = nx.path_graph(4)
@@ -50,10 +67,12 @@ def hits(G, max_iter=100, tol=1.0e-8, nstart=None, normalized=True):
 
     Notes
     -----
-    The eigenvector calculation is done by the power iteration method
-    and has no guarantee of convergence.  The iteration will stop
-    after max_iter iterations or an error tolerance of
-    number_of_nodes(G)*tol has been reached.
+    With ``method="power_iteration"``, the eigenvector calculation is done
+    by the power iteration method and has no guarantee of convergence. The
+    iteration will stop after `max_iter` iterations or when the change in
+    the hub values between two successive iterations is smaller than `tol`.
+    With ``method="svd"``, `max_iter` and `tol` are passed to
+    ``scipy.sparse.linalg.svds``.
 
     The HITS algorithm was designed for directed graphs but this
     algorithm does not check if the input graph is directed and will
@@ -63,13 +82,67 @@ def hits(G, max_iter=100, tol=1.0e-8, nstart=None, normalized=True):
     ----------
     .. [1] A. Langville and C. Meyer,
        "A survey of eigenvector methods of web information retrieval."
-       http://citeseer.ist.psu.edu/713792.html
+       https://epubs.siam.org/doi/epdf/10.1137/S0036144503424786
     .. [2] Jon Kleinberg,
        Authoritative sources in a hyperlinked environment
        Journal of the ACM 46 (5): 604-32, 1999.
+       https://www.cs.cornell.edu/home/kleinber/auth.pdf
        doi:10.1145/324133.324140.
-       http://www.cs.cornell.edu/home/kleinber/auth.pdf.
     """
+    if method == "power_iteration":
+        return _hits_power_iteration(G, max_iter, tol, nstart, normalized)
+    if method == "svd":
+        return _hits_svd(G, max_iter, tol, nstart, normalized)
+    raise ValueError(f"method not supported: {method}")
+
+
+def _hits_power_iteration(G, max_iter=100, tol=1.0e-8, nstart=None, normalized=True):
+    import numpy as np
+
+    N = len(G)
+    if N == 0:
+        return {}, {}
+    nodelist = list(G)
+    A = nx.adjacency_matrix(G, nodelist=nodelist, dtype=float)
+
+    if nstart is None:
+        h = np.full(N, 1.0 / N)
+    else:
+        missing = G.nodes - nstart.keys()
+        if missing:
+            raise nx.NetworkXError(
+                f"nstart must have a value for every node; missing: {missing}"
+            )
+        h = np.array([nstart[node] for node in nodelist], dtype=float)
+        s = h.sum()
+        if s == 0:
+            raise nx.NetworkXError("nstart values must not sum to zero")
+        h = h / s
+
+    if max_iter <= 0:
+        raise nx.PowerIterationFailedConvergence(max_iter)
+
+    for _ in range(max_iter):
+        hlast = h
+        a = h @ A
+        h = A @ a
+        h /= h.max()
+        if np.abs(h - hlast).sum() < tol:
+            break
+    else:
+        raise nx.PowerIterationFailedConvergence(max_iter)
+
+    if normalized:
+        h /= h.sum()
+        a /= a.sum()
+    else:
+        a /= a.max()
+    hubs = dict(zip(nodelist, map(float, h)))
+    authorities = dict(zip(nodelist, map(float, a)))
+    return hubs, authorities
+
+
+def _hits_svd(G, max_iter=100, tol=1.0e-8, nstart=None, normalized=True):
     import numpy as np
     import scipy as sp
 
@@ -214,11 +287,11 @@ def _hits_numpy(G, normalized=True):
     adj_ary = nx.to_numpy_array(G)
     # Hub matrix
     H = adj_ary @ adj_ary.T
-    e, ev = np.linalg.eig(H)
+    e, ev = np.linalg.eigh(H)
     h = ev[:, np.argmax(e)]  # eigenvector corresponding to the maximum eigenvalue
     # Authority matrix
     A = adj_ary.T @ adj_ary
-    e, ev = np.linalg.eig(A)
+    e, ev = np.linalg.eigh(A)
     a = ev[:, np.argmax(e)]  # eigenvector corresponding to the maximum eigenvalue
     if normalized:
         h /= h.sum()
@@ -226,112 +299,6 @@ def _hits_numpy(G, normalized=True):
     else:
         h /= h.max()
         a /= a.max()
-    hubs = dict(zip(G, map(float, h)))
-    authorities = dict(zip(G, map(float, a)))
-    return hubs, authorities
-
-
-def _hits_scipy(G, max_iter=100, tol=1.0e-6, nstart=None, normalized=True):
-    """Returns HITS hubs and authorities values for nodes.
-
-
-    The HITS algorithm computes two numbers for a node.
-    Authorities estimates the node value based on the incoming links.
-    Hubs estimates the node value based on outgoing links.
-
-    Parameters
-    ----------
-    G : graph
-      A NetworkX graph
-
-    max_iter : integer, optional
-      Maximum number of iterations in power method.
-
-    tol : float, optional
-      Error tolerance used to check convergence in power method iteration.
-
-    nstart : dictionary, optional
-      Starting value of each node for power method iteration.
-
-    normalized : bool (default=True)
-       Normalize results by the sum of all of the values.
-
-    Returns
-    -------
-    (hubs,authorities) : two-tuple of dictionaries
-       Two dictionaries keyed by node containing the hub and authority
-       values.
-
-    Examples
-    --------
-    >>> from networkx.algorithms.link_analysis.hits_alg import _hits_scipy
-    >>> G = nx.path_graph(4)
-    >>> h, a = _hits_scipy(G)
-
-    Notes
-    -----
-    This implementation uses SciPy sparse matrices.
-
-    The eigenvector calculation is done by the power iteration method
-    and has no guarantee of convergence.  The iteration will stop
-    after max_iter iterations or an error tolerance of
-    number_of_nodes(G)*tol has been reached.
-
-    The HITS algorithm was designed for directed graphs but this
-    algorithm does not check if the input graph is directed and will
-    execute on undirected graphs.
-
-    Raises
-    ------
-    PowerIterationFailedConvergence
-        If the algorithm fails to converge to the specified tolerance
-        within the specified number of iterations of the power iteration
-        method.
-
-    References
-    ----------
-    .. [1] A. Langville and C. Meyer,
-       "A survey of eigenvector methods of web information retrieval."
-       http://citeseer.ist.psu.edu/713792.html
-    .. [2] Jon Kleinberg,
-       Authoritative sources in a hyperlinked environment
-       Journal of the ACM 46 (5): 604-632, 1999.
-       doi:10.1145/324133.324140.
-       http://www.cs.cornell.edu/home/kleinber/auth.pdf.
-    """
-    import numpy as np
-
-    if len(G) == 0:
-        return {}, {}
-    A = nx.to_scipy_sparse_array(G, nodelist=list(G))
-    (n, _) = A.shape  # should be square
-    ATA = A.T @ A  # authority matrix
-    # choose fixed starting vector if not given
-    if nstart is None:
-        x = np.ones((n, 1)) / n
-    else:
-        x = np.array([nstart.get(n, 0) for n in list(G)], dtype=float)
-        x /= x.sum()
-
-    # power iteration on authority matrix
-    i = 0
-    while True:
-        xlast = x
-        x = ATA @ x
-        x /= x.max()
-        # check convergence, l1 norm
-        err = np.absolute(x - xlast).sum()
-        if err < tol:
-            break
-        if i > max_iter:
-            raise nx.PowerIterationFailedConvergence(max_iter)
-        i += 1
-
-    a = x.flatten()
-    h = A @ a
-    if normalized:
-        h /= h.sum()
-        a /= a.sum()
     hubs = dict(zip(G, map(float, h)))
     authorities = dict(zip(G, map(float, a)))
     return hubs, authorities

@@ -1,4 +1,4 @@
-r""" This module provides functions and operations for bipartite
+r"""This module provides functions and operations for bipartite
 graphs.  Bipartite graphs `B = (U, V, E)` have two node sets `U,V` and edges in
 `E` that only connect nodes from opposite sets. It is common in the literature
 to use an spatial analogy referring to the two node sets as top and bottom nodes.
@@ -76,6 +76,7 @@ For other bipartite graph generators see
 from networkx.algorithms.bipartite.basic import *
 from networkx.algorithms.bipartite.centrality import *
 from networkx.algorithms.bipartite.cluster import *
+from networkx.algorithms.bipartite.community import *
 from networkx.algorithms.bipartite.covering import *
 from networkx.algorithms.bipartite.edgelist import *
 from networkx.algorithms.bipartite.matching import *
@@ -85,3 +86,4 @@ from networkx.algorithms.bipartite.redundancy import *
 from networkx.algorithms.bipartite.spectral import *
 from networkx.algorithms.bipartite.generators import *
 from networkx.algorithms.bipartite.extendability import *
+from networkx.algorithms.bipartite.link_analysis import *

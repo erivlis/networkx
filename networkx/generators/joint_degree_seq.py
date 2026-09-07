@@ -142,7 +142,7 @@ def _neighbor_switch(G, w, unsat, h_node_residual, avoid_node_id=None):
 
 
 @py_random_state(1)
-@nx._dispatchable(graphs=None)
+@nx._dispatchable(graphs=None, returns_graph=True)
 def joint_degree_graph(joint_degrees, seed=None):
     """Generates a random simple graph with the given joint degree dictionary.
 
@@ -469,15 +469,16 @@ def _directed_neighbor_switch_rev(
 
 
 @py_random_state(3)
-@nx._dispatchable(graphs=None)
+@nx._dispatchable(graphs=None, returns_graph=True)
 def directed_joint_degree_graph(in_degrees, out_degrees, nkk, seed=None):
     """Generates a random simple directed graph with the joint degree.
 
     Parameters
     ----------
-    degree_seq :  list of tuples (of size 3)
-        degree sequence contains tuples of nodes with node id, in degree and
-        out degree.
+    in_degrees :  list of integers
+        in degree sequence contains the in degrees of nodes.
+    out_degrees : list of integers
+        out degree sequence contains the out degrees of nodes.
     nkk  :  dictionary of dictionary of integers
         directed joint degree dictionary, for nodes of out degree k (first
         level of dict) and nodes of in degree l (second level of dict)
@@ -493,7 +494,8 @@ def directed_joint_degree_graph(in_degrees, out_degrees, nkk, seed=None):
     Raises
     ------
     NetworkXError
-        If degree_seq and nkk are not realizable as a simple directed graph.
+        If in_degrees, out_degrees and nkk are not realizable as a simple
+        directed graph.
 
 
     Notes

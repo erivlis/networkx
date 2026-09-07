@@ -11,8 +11,8 @@ For more information, see the `sparse6`_ homepage.
 .. _sparse6: https://users.cecs.anu.edu.au/~bdm/data/formats.html
 
 """
+
 import networkx as nx
-from networkx.exception import NetworkXError
 from networkx.readwrite.graph6 import data_to_n, n_to_data
 from networkx.utils import not_implemented_for, open_file
 
@@ -101,7 +101,7 @@ def _generate_sparse6_bytes(G, nodes, header):
     yield b"\n"
 
 
-@nx._dispatchable(graphs=None)
+@nx._dispatchable(graphs=None, returns_graph=True)
 def from_sparse6_bytes(string):
     """Read an undirected graph in sparse6 format from string.
 
@@ -138,9 +138,11 @@ def from_sparse6_bytes(string):
     if string.startswith(b">>sparse6<<"):
         string = string[11:]
     if not string.startswith(b":"):
-        raise NetworkXError("Expected leading colon in sparse6")
+        raise nx.NetworkXError("Expected leading colon in sparse6")
 
     chars = [c - 63 for c in string[1:]]
+    if any(c < 0 or c > 63 for c in chars):
+        raise ValueError("each input character must be in range(63, 127)")
     n, data = data_to_n(chars)
     k = 1
     while 1 << k < n:
@@ -250,14 +252,15 @@ def to_sparse6_bytes(G, nodes=None, header=True):
 
 
 @open_file(0, mode="rb")
-@nx._dispatchable(graphs=None)
+@nx._dispatchable(graphs=None, returns_graph=True)
 def read_sparse6(path):
     """Read an undirected graph in sparse6 format from path.
 
     Parameters
     ----------
     path : file or string
-       File or filename to write.
+       Filename or file handle to read.
+       Filenames ending in .gz or .bz2 will be decompressed.
 
     Returns
     -------
@@ -323,7 +326,8 @@ def write_sparse6(G, path, nodes=None, header=True):
     G : Graph (undirected)
 
     path : file or string
-       File or filename to write
+       File or filename to write.
+       Filenames ending in .gz or .bz2 will be compressed.
 
     nodes: list or iterable
        Nodes are labeled 0...n-1 in the order provided.  If None the ordering

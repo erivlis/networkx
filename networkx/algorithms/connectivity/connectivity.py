@@ -10,16 +10,15 @@ import networkx as nx
 # Define the default maximum flow function to use in all flow based
 # connectivity algorithms.
 from networkx.algorithms.flow import (
-    boykov_kolmogorov,
     build_residual_network,
-    dinitz,
     edmonds_karp,
+    preflow_push,
     shortest_augmenting_path,
 )
 
-default_flow_func = edmonds_karp
-
 from .utils import build_auxiliary_edge_connectivity, build_auxiliary_node_connectivity
+
+default_flow_func = edmonds_karp
 
 __all__ = [
     "average_node_connectivity",
@@ -31,11 +30,7 @@ __all__ = [
 ]
 
 
-@nx._dispatchable(
-    graphs={"G": 0, "auxiliary?": 4, "residual?": 5},
-    preserve_edge_attrs={"residual": {"capacity": float("inf")}},
-    preserve_graph_attrs={"auxiliary", "residual"},
-)
+@nx._dispatchable(graphs={"G": 0, "auxiliary?": 4}, preserve_graph_attrs={"auxiliary"})
 def local_node_connectivity(
     G, s, t, flow_func=None, auxiliary=None, residual=None, cutoff=None
 ):
@@ -199,15 +194,12 @@ def local_node_connectivity(
         raise nx.NetworkXError("Invalid auxiliary digraph.")
 
     kwargs = {"flow_func": flow_func, "residual": residual}
+
+    if flow_func is not preflow_push:
+        kwargs["cutoff"] = cutoff
+
     if flow_func is shortest_augmenting_path:
-        kwargs["cutoff"] = cutoff
         kwargs["two_phase"] = True
-    elif flow_func is edmonds_karp:
-        kwargs["cutoff"] = cutoff
-    elif flow_func is dinitz:
-        kwargs["cutoff"] = cutoff
-    elif flow_func is boykov_kolmogorov:
-        kwargs["cutoff"] = cutoff
 
     return nx.maximum_flow_value(H, f"{mapping[s]}B", f"{mapping[t]}A", **kwargs)
 
@@ -288,6 +280,9 @@ def node_connectivity(G, s=None, t=None, flow_func=None):
     :meth:`local_node_connectivity`. This implementation is based
     on algorithm 11 in [1]_.
 
+    The local node connectivity of an ordered pair of nodes of a digraph
+    is not symmetric, so both orders of each pair are considered [2]_.
+
     See also
     --------
     :meth:`local_node_connectivity`
@@ -301,6 +296,11 @@ def node_connectivity(G, s=None, t=None, flow_func=None):
     ----------
     .. [1] Abdol-Hossein Esfahanian. Connectivity Algorithms.
         http://www.cse.msu.edu/~cse835/Papers/Graph_connectivity_revised.pdf
+
+    .. [2] Shimon Even and R. Endre Tarjan. Network Flow and Testing Graph
+        Connectivity. SIAM Journal on Computing, Volume 4, Issue 4,
+        pp. 507-518, 1975.
+        https://doi.org/10.1137/0204043
 
     """
     if (s is not None and t is None) or (s is None and t is not None):
@@ -325,26 +325,51 @@ def node_connectivity(G, s=None, t=None, flow_func=None):
         def neighbors(v):
             return itertools.chain.from_iterable([G.predecessors(v), G.successors(v)])
 
+        # Isolating a node only requires removing all its predecessors or all
+        # its successors, so the bound is the smaller of the two.
+        def degree(v):
+            return min(len(G.pred[v].keys() - {v}), len(G.succ[v].keys() - {v}))
+
+        # In a digraph the local node connectivity of an ordered pair is not
+        # symmetric, and v has to lie on the source side of a minimum node cut
+        # for its value to be the right one, so both orders are needed. Page
+        # 513 of [2] states that for a digraph both N(v, w) and N(w, v) have to
+        # be computed.
+        def ordered_pairs(v, w):
+            return ((v, w), (w, v))
+
     else:
         if not nx.is_connected(G):
             return 0
         iter_func = itertools.combinations
         neighbors = G.neighbors
 
+        def degree(v):
+            return len(G[v].keys() - {v})
+
+        def ordered_pairs(v, w):
+            return ((v, w),)
+
     # Reuse the auxiliary digraph and the residual network
     H = build_auxiliary_node_connectivity(G)
     R = build_residual_network(H, "capacity")
     kwargs = {"flow_func": flow_func, "auxiliary": H, "residual": R}
 
-    # Pick a node with minimum degree
-    # Node connectivity is bounded by degree.
-    v, K = min(G.degree(), key=itemgetter(1))
+    # Pick a node with minimum degree. Node connectivity is bounded by the
+    # number of distinct neighbors. `G.degree` cannot be used here because
+    # parallel edges do not add connectivity and self-loops are irrelevant
+    # for it.
+    v, K = min(((n, degree(n)) for n in G), key=itemgetter(1))
+    # Neighbors of v, excluding v itself if it has a self-loop. For digraphs
+    # this deduplicates the nodes that are both predecessors and successors.
+    v_nbrs = set(neighbors(v)) - {v}
     # compute local node connectivity with all its non-neighbors nodes
-    for w in set(G) - set(neighbors(v)) - {v}:
-        kwargs["cutoff"] = K
-        K = min(K, local_node_connectivity(G, v, w, **kwargs))
+    for w in set(G) - v_nbrs - {v}:
+        for s, t in ordered_pairs(v, w):
+            kwargs["cutoff"] = K
+            K = min(K, local_node_connectivity(G, s, t, **kwargs))
     # Also for non adjacent pairs of neighbors of v
-    for x, y in iter_func(neighbors(v), 2):
+    for x, y in iter_func(v_nbrs, 2):
         if y in G[x]:
             continue
         kwargs["cutoff"] = K
@@ -490,11 +515,7 @@ def all_pairs_node_connectivity(G, nbunch=None, flow_func=None):
     return all_pairs
 
 
-@nx._dispatchable(
-    graphs={"G": 0, "auxiliary?": 4, "residual?": 5},
-    preserve_edge_attrs={"residual": {"capacity": float("inf")}},
-    preserve_graph_attrs={"residual"},
-)
+@nx._dispatchable(graphs={"G": 0, "auxiliary?": 4})
 def local_edge_connectivity(
     G, s, t, flow_func=None, auxiliary=None, residual=None, cutoff=None
 ):
@@ -643,15 +664,12 @@ def local_edge_connectivity(
         H = auxiliary
 
     kwargs = {"flow_func": flow_func, "residual": residual}
+
+    if flow_func is not preflow_push:
+        kwargs["cutoff"] = cutoff
+
     if flow_func is shortest_augmenting_path:
-        kwargs["cutoff"] = cutoff
         kwargs["two_phase"] = True
-    elif flow_func is edmonds_karp:
-        kwargs["cutoff"] = cutoff
-    elif flow_func is dinitz:
-        kwargs["cutoff"] = cutoff
-    elif flow_func is boykov_kolmogorov:
-        kwargs["cutoff"] = cutoff
 
     return nx.maximum_flow_value(H, s, t, **kwargs)
 

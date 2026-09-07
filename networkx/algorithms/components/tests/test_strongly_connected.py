@@ -60,12 +60,6 @@ class TestStronglyConnected:
         for G, C in self.gc:
             assert {frozenset(g) for g in scc(G)} == C
 
-    def test_tarjan_recursive(self):
-        scc = nx.strongly_connected_components_recursive
-        for G, C in self.gc:
-            with pytest.deprecated_call():
-                assert {frozenset(g) for g in scc(G)} == C
-
     def test_kosaraju(self):
         scc = nx.kosaraju_strongly_connected_components
         for G, C in self.gc:
@@ -169,12 +163,21 @@ class TestStronglyConnected:
         G = nx.DiGraph()
         assert list(nx.strongly_connected_components(G)) == []
         assert list(nx.kosaraju_strongly_connected_components(G)) == []
-        with pytest.deprecated_call():
-            assert list(nx.strongly_connected_components_recursive(G)) == []
         assert len(nx.condensation(G)) == 0
         pytest.raises(
             nx.NetworkXPointlessConcept, nx.is_strongly_connected, nx.DiGraph()
         )
+
+    def test_single_scc_early_exit(self):
+        # Exercises the early-exit branch of strongly_connected_components:
+        # the whole graph is a single SCC, so once a back arc makes the
+        # current node's lowlink match the DFS-tree root's and every node
+        # has been preordered, the algorithm should emit one component
+        # and bail out of the DFS.
+        G = nx.DiGraph([(0, 1), (1, 2), (1, 5), (2, 3), (3, 1), (3, 4), (4, 0), (5, 2)])
+        components = list(nx.strongly_connected_components(G))
+        assert len(components) == 1
+        assert components[0] == {0, 1, 2, 3, 4, 5}
 
     def test_connected_raise(self):
         G = nx.Graph()
@@ -182,8 +185,6 @@ class TestStronglyConnected:
             next(nx.strongly_connected_components(G))
         with pytest.raises(NetworkXNotImplemented):
             next(nx.kosaraju_strongly_connected_components(G))
-        with pytest.raises(NetworkXNotImplemented):
-            next(nx.strongly_connected_components_recursive(G))
         pytest.raises(NetworkXNotImplemented, nx.is_strongly_connected, G)
         pytest.raises(NetworkXNotImplemented, nx.condensation, G)
 

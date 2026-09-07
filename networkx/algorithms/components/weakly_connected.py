@@ -1,4 +1,5 @@
 """Weakly connected components."""
+
 import networkx as nx
 from networkx.utils.decorators import not_implemented_for
 
@@ -36,7 +37,10 @@ def weakly_connected_components(G):
 
     >>> G = nx.path_graph(4, create_using=nx.DiGraph())
     >>> nx.add_path(G, [10, 11, 12])
-    >>> [len(c) for c in sorted(nx.weakly_connected_components(G), key=len, reverse=True)]
+    >>> [
+    ...     len(c)
+    ...     for c in sorted(nx.weakly_connected_components(G), key=len, reverse=True)
+    ... ]
     [4, 3]
 
     If you only want the largest component, it's more efficient to
@@ -55,9 +59,10 @@ def weakly_connected_components(G):
 
     """
     seen = set()
+    n = len(G)  # must be outside the loop to avoid performance hit with graph views
     for v in G:
         if v not in seen:
-            c = set(_plain_bfs(G, v))
+            c = _plain_bfs(G, n - len(seen), v)
             seen.update(c)
             yield c
 
@@ -99,7 +104,7 @@ def number_weakly_connected_components(G):
     For directed graphs only.
 
     """
-    return sum(1 for wcc in weakly_connected_components(G))
+    return sum(1 for _ in weakly_connected_components(G))
 
 
 @not_implemented_for("undirected")
@@ -152,15 +157,16 @@ def is_weakly_connected(G):
     For directed graphs only.
 
     """
-    if len(G) == 0:
+    n = len(G)
+    if n == 0:
         raise nx.NetworkXPointlessConcept(
             """Connectivity is undefined for the null graph."""
         )
 
-    return len(next(weakly_connected_components(G))) == len(G)
+    return len(next(weakly_connected_components(G))) == n
 
 
-def _plain_bfs(G, source):
+def _plain_bfs(G, n, source):
     """A fast BFS node generator
 
     The direction of the edge between nodes is ignored.
@@ -168,13 +174,11 @@ def _plain_bfs(G, source):
     For directed graphs only.
 
     """
-    n = len(G)
     Gsucc = G._succ
     Gpred = G._pred
     seen = {source}
     nextlevel = [source]
 
-    yield source
     while nextlevel:
         thislevel = nextlevel
         nextlevel = []
@@ -183,11 +187,10 @@ def _plain_bfs(G, source):
                 if w not in seen:
                     seen.add(w)
                     nextlevel.append(w)
-                    yield w
             for w in Gpred[v]:
                 if w not in seen:
                     seen.add(w)
                     nextlevel.append(w)
-                    yield w
             if len(seen) == n:
-                return
+                return seen
+    return seen

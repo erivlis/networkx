@@ -83,6 +83,7 @@ Clustering
 
    clustering
    average_clustering
+   butterflies
    latapy_clustering
    robins_alexander_clustering
 
@@ -140,3 +141,19 @@ Extendability
 
    maximal_extendability
 
+
+Link Analysis
+-------------
+.. automodule:: networkx.algorithms.bipartite.link_analysis
+.. autosummary::
+   :toctree: generated/
+
+   birank
+
+Communities
+-----------
+.. automodule:: networkx.algorithms.bipartite.community
+.. autosummary::
+   :toctree: generated/
+
+   modularity

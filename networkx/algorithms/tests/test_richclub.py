@@ -21,8 +21,15 @@ def test_richclub_seed():
 
 def test_richclub_normalized():
     G = nx.Graph([(0, 1), (0, 2), (1, 2), (1, 3), (1, 4), (4, 5)])
-    rcNorm = nx.richclub.rich_club_coefficient(G, Q=2)
+    rcNorm = nx.richclub.rich_club_coefficient(G, Q=2, seed=42)
     assert rcNorm == {0: 1.0, 1: 1.0}
+
+
+def test_rich_club_invalid_n_samples():
+    G = nx.Graph([(0, 1), (0, 2), (1, 2), (1, 3), (1, 4), (4, 5)])
+    with pytest.raises(ValueError):
+        nx.rich_club_coefficient(G, normalized=True, n_samples=0)
+    nx.rich_club_coefficient(G, normalized=False, n_samples=0)
 
 
 def test_richclub2():
@@ -86,7 +93,7 @@ def test_rich_club_selfloop():
     G.add_edge(1, 2)
     with pytest.raises(
         Exception,
-        match="rich_club_coefficient is not implemented for " "graphs with self loops.",
+        match="rich_club_coefficient is not implemented for graphs with self loops.",
     ):
         nx.rich_club_coefficient(G)
 
@@ -128,19 +135,23 @@ def test_rich_club_leq_3_nodes_unnormalized():
 
 def test_rich_club_leq_3_nodes_normalized():
     G = nx.Graph()
-    with pytest.raises(
-        nx.exception.NetworkXError,
-        match="Graph has fewer than four nodes",
-    ):
+    with pytest.raises(nx.NetworkXError, match="Graph has fewer than four nodes"):
         rc = nx.rich_club_coefficient(G, normalized=True)
 
     for i in range(3):
         G.add_node(i)
-        with pytest.raises(
-            nx.exception.NetworkXError,
-            match="Graph has fewer than four nodes",
-        ):
+        with pytest.raises(nx.NetworkXError, match="Graph has fewer than four nodes"):
             rc = nx.rich_club_coefficient(G, normalized=True)
+
+
+def test_rich_club_zero_division_error():
+    # See gh-8485
+    G = nx.Graph([(0, 1), (0, 2), (3, 4), (3, 5), (0, 3), (6, 7)])
+    with pytest.raises(nx.NetworkXError):
+        nx.rich_club_coefficient(G, normalized=True, Q=1, seed=4)
+    # Increasing n_samples avoids the ZeroDivisionError
+    rc = nx.rich_club_coefficient(G, normalized=True, Q=1, n_samples=2, seed=4)
+    assert len(rc) > 0
 
 
 # def test_richclub2_normalized():

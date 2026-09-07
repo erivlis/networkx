@@ -1,5 +1,4 @@
-"""PageRank analysis of graph structure. """
-from warnings import warn
+"""PageRank analysis of graph structure."""
 
 import networkx as nx
 
@@ -46,6 +45,12 @@ def pagerank(
       Error tolerance used to check convergence in power method solver.
       The iteration will stop after a tolerance of ``len(G) * tol`` is reached.
 
+      .. note::
+
+         For large graphs, choose the tolerance carefully. If ``len(G) * tol >= 2``,
+         the power iteration may appear to converge after a single step regardless
+         of the actual accuracy.
+
     nstart : dictionary, optional
       Starting value of PageRank iteration for each node.
 
@@ -78,7 +83,7 @@ def pagerank(
     and has no guarantee of convergence.  The iteration will stop after
     an error tolerance of ``len(G) * tol`` has been reached. If the
     number of iterations exceed `max_iter`, a
-    :exc:`networkx.exception.PowerIterationFailedConvergence` exception
+    :exc:`~networkx.exception.PowerIterationFailedConvergence` exception
     is raised.
 
     The PageRank algorithm was designed for directed graphs but this
@@ -89,6 +94,7 @@ def pagerank(
     See Also
     --------
     google_matrix
+    :func:`~networkx.algorithms.bipartite.link_analysis.birank`
 
     Raises
     ------
@@ -459,9 +465,9 @@ def _pagerank_scipy(
     nodelist = list(G)
     A = nx.to_scipy_sparse_array(G, nodelist=nodelist, weight=weight, dtype=float)
     S = A.sum(axis=1)
-    S[S != 0] = 1.0 / S[S != 0]
-    # TODO: csr_array
-    Q = sp.sparse.csr_array(sp.sparse.spdiags(S.T, 0, *A.shape))
+    dangling_nodes = S == 0
+    S[~dangling_nodes] = 1.0 / S[~dangling_nodes]
+    Q = sp.sparse.dia_array((S, 0), shape=A.shape).tocsr()
     A = Q @ A
 
     # initial vector
@@ -486,12 +492,14 @@ def _pagerank_scipy(
         # Convert the dangling dictionary into an array in nodelist order
         dangling_weights = np.array([dangling.get(n, 0) for n in nodelist], dtype=float)
         dangling_weights /= dangling_weights.sum()
-    is_dangling = np.where(S == 0)[0]
 
     # power iteration: make up to max_iter iterations
     for _ in range(max_iter):
         xlast = x
-        x = alpha * (x @ A + sum(x[is_dangling]) * dangling_weights) + (1 - alpha) * p
+        x = (
+            alpha * (x @ A + np.sum(x[dangling_nodes]) * dangling_weights)
+            + (1 - alpha) * p
+        )
         # check convergence, l1 norm
         err = np.absolute(x - xlast).sum()
         if err < N * tol:
