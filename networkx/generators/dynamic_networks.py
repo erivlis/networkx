@@ -77,7 +77,7 @@ def _edge_distance_function(distance):
 
 @not_implemented_for("directed")
 @not_implemented_for("multigraph")
-@nx._dispatchable(node_attrs="scalar_field_value", edge_attrs="scalar_field_distance")
+@nx._dispatchable(node_attrs="scalar_field_value", edge_attrs="scalar_field_distance", returns_graph=True)
 def gradient_network(
     G,
     scalar_field_value: str | Callable = "value",
@@ -273,7 +273,7 @@ def _bind_time_edge_distance(distance, t):
 
 @not_implemented_for("directed")
 @not_implemented_for("multigraph")
-@nx._dispatchable(node_attrs="scalar_field_value", edge_attrs="scalar_field_distance")
+@nx._dispatchable(node_attrs="scalar_field_value", edge_attrs="scalar_field_distance", returns_graph=True)
 def gradient_network_sequence(
     G,
     times,
