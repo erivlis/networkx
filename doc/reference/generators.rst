@@ -386,3 +386,4 @@ Dynamic Networks
    :toctree: generated/
 
    gradient_network
+   gradient_network_sequence
