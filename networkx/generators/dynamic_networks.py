@@ -1,6 +1,7 @@
 """
 Dynamic Networks.
 """
+
 import inspect
 import itertools
 from collections.abc import Callable
@@ -70,17 +71,13 @@ def _edge_distance_function(distance):
         return lambda u, v, d: distance(u, v, d)
 
     return lambda u, v, d: (
-        d[distance]()
-        if callable(d.get(distance, 1.0))
-        else d.get(distance, 1.0)
+        d[distance]() if callable(d.get(distance, 1.0)) else d.get(distance, 1.0)
     )
 
 
 @not_implemented_for("directed")
 @not_implemented_for("multigraph")
-@nx._dispatchable(
-    node_attrs="scalar_field_value", edge_attrs="scalar_field_distance"
-)
+@nx._dispatchable(node_attrs="scalar_field_value", edge_attrs="scalar_field_distance")
 def gradient_network(
     G,
     scalar_field_value: str | Callable = "value",
@@ -171,9 +168,7 @@ def gradient_network(
     .. [3] "Gradient network", Wikipedia, https://en.wikipedia.org/wiki/Gradient_network
     """
     node_val_func = _node_value_function(scalar_field_value)
-    node_values = {
-        node: node_val_func(node, data) for node, data in G.nodes(data=True)
-    }
+    node_values = {node: node_val_func(node, data) for node, data in G.nodes(data=True)}
 
     edge_dist_func = _edge_distance_function(scalar_field_distance)
 
@@ -278,9 +273,7 @@ def _bind_time_edge_distance(distance, t):
 
 @not_implemented_for("directed")
 @not_implemented_for("multigraph")
-@nx._dispatchable(
-    node_attrs="scalar_field_value", edge_attrs="scalar_field_distance"
-)
+@nx._dispatchable(node_attrs="scalar_field_value", edge_attrs="scalar_field_distance")
 def gradient_network_sequence(
     G,
     times,
