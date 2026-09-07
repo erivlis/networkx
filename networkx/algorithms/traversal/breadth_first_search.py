@@ -1,4 +1,5 @@
 """Basic algorithms for breadth-first searching the nodes of a graph."""
+
 from collections import deque
 
 import networkx as nx
@@ -16,7 +17,7 @@ __all__ = [
 
 
 @nx._dispatchable
-def generic_bfs_edges(G, source, neighbors=None, depth_limit=None, sort_neighbors=None):
+def generic_bfs_edges(G, source, neighbors=None, depth_limit=None):
     """Iterate over edges in a breadth-first search.
 
     The breadth-first search begins at `source` and enqueues the
@@ -42,18 +43,6 @@ def generic_bfs_edges(G, source, neighbors=None, depth_limit=None, sort_neighbor
 
     depth_limit : int, optional(default=len(G))
         Specify the maximum search depth.
-
-    sort_neighbors : Callable (default=None)
-
-        .. deprecated:: 3.2
-
-           The sort_neighbors parameter is deprecated and will be removed in
-           version 3.4. A custom (e.g. sorted) ordering of neighbors can be
-           specified with the `neighbors` parameter.
-
-        A function that takes an iterator over nodes as the input, and
-        returns an iterable of the same nodes with a custom ordering.
-        For example, `sorted` will sort the nodes in increasing order.
 
     Yields
     ------
@@ -95,19 +84,6 @@ def generic_bfs_edges(G, source, neighbors=None, depth_limit=None, sort_neighbor
     """
     if neighbors is None:
         neighbors = G.neighbors
-    if sort_neighbors is not None:
-        import warnings
-
-        warnings.warn(
-            (
-                "The sort_neighbors parameter is deprecated and will be removed\n"
-                "in NetworkX 3.4, use the neighbors parameter instead."
-            ),
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        _neighbors = neighbors
-        neighbors = lambda node: iter(sort_neighbors(_neighbors(node)))
     if depth_limit is None:
         depth_limit = len(G)
 
@@ -160,22 +136,22 @@ def bfs_edges(G, source, reverse=False, depth_limit=None, sort_neighbors=None):
 
     Examples
     --------
-    To get the edges in a breadth-first search::
+    To get the edges in a breadth-first search:
 
-        >>> G = nx.path_graph(3)
-        >>> list(nx.bfs_edges(G, 0))
-        [(0, 1), (1, 2)]
-        >>> list(nx.bfs_edges(G, source=0, depth_limit=1))
-        [(0, 1)]
+    >>> G = nx.path_graph(3)
+    >>> list(nx.bfs_edges(G, 0))
+    [(0, 1), (1, 2)]
+    >>> list(nx.bfs_edges(G, source=0, depth_limit=1))
+    [(0, 1)]
 
-    To get the nodes in a breadth-first search order::
+    To get the nodes in a breadth-first search order:
 
-        >>> G = nx.path_graph(3)
-        >>> root = 2
-        >>> edges = nx.bfs_edges(G, root)
-        >>> nodes = [root] + [v for u, v in edges]
-        >>> nodes
-        [2, 1, 0]
+    >>> G = nx.path_graph(3)
+    >>> root = 2
+    >>> edges = nx.bfs_edges(G, root)
+    >>> nodes = [root] + [v for u, v in edges]
+    >>> nodes
+    [2, 1, 0]
 
     Notes
     -----
@@ -218,7 +194,7 @@ def bfs_edges(G, source, reverse=False, depth_limit=None, sort_neighbors=None):
         yield from generic_bfs_edges(G, source, successors, depth_limit)
 
 
-@nx._dispatchable
+@nx._dispatchable(returns_graph=True)
 def bfs_tree(G, source, reverse=False, depth_limit=None, sort_neighbors=None):
     """Returns an oriented tree constructed from of a breadth-first-search
     starting at source.
@@ -290,6 +266,19 @@ def bfs_tree(G, source, reverse=False, depth_limit=None, sort_neighbors=None):
 def bfs_predecessors(G, source, depth_limit=None, sort_neighbors=None):
     """Returns an iterator of predecessors in breadth-first-search from source.
 
+    .. deprecated:: 3.7
+
+       bfs_predecessors is deprecated and will be removed in NetworkX 3.9.
+       Use ``(t, s) for (s, t) in nx.bfs_edges(G, source, depth_limit, sort_neighbors)``
+       instead.
+
+    Each yielded ``(node, predecessor)`` tuple describes a node and
+    the node from which it is discovered in the breadth-first-search.
+
+    The term "predecessor" here is not the directed graph term "predecessor".
+    We are not doing BFS in reverse direction. We are just reporting the
+    preceding node for each node in a BFS.
+
     Parameters
     ----------
     G : NetworkX graph
@@ -346,6 +335,17 @@ def bfs_predecessors(G, source, depth_limit=None, sort_neighbors=None):
     bfs_edges
     edge_bfs
     """
+    import warnings
+
+    warnings.warn(
+        (
+            "\n\nbfs_predecessors is deprecated and will be removed in NetworkX 3.9\n"
+            "Use ``(t, s) for (s, t) in bfs_edges`` instead"
+        ),
+        category=DeprecationWarning,
+        stacklevel=2,
+    )
+
     for s, t in bfs_edges(
         G, source, depth_limit=depth_limit, sort_neighbors=sort_neighbors
     ):
@@ -374,9 +374,9 @@ def bfs_successors(G, source, depth_limit=None, sort_neighbors=None):
     Returns
     -------
     succ: iterator
-       (node, successors) iterator where `successors` is the non-empty list of
-       successors of `node` in a breadth first search from `source`.
-       To appear in the iterator, `node` must have successors.
+       (node, successors) iterator where `successors` is the list of
+       successors of `node` in a breadth-first search from `source`.
+       Nodes with no successors are included with an empty successor list.
 
     Examples
     --------
@@ -435,13 +435,14 @@ def bfs_layers(G, sources):
     G : NetworkX graph
         A graph over which to find the layers using breadth-first search.
 
-    sources : node in `G` or list of nodes in `G`
-        Specify starting nodes for single source or multiple sources breadth-first search
+    sources : node in `G` or iterable of nodes in `G`
+        Specify starting nodes for single source or multiple sources
+        breadth-first search.
 
     Yields
     ------
-    layer: list of nodes
-        Yields list of nodes at the same distance from sources
+    layer : list of nodes
+        Yields list of nodes at the same distance from `sources`.
 
     Examples
     --------
@@ -458,8 +459,8 @@ def bfs_layers(G, sources):
     if sources in G:
         sources = [sources]
 
-    current_layer = list(sources)
     visited = set(sources)
+    current_layer = list(visited)
 
     for source in current_layer:
         if source not in G:

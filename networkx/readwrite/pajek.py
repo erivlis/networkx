@@ -110,8 +110,26 @@ def write_pajek(G, path, encoding="UTF-8"):
 
     Examples
     --------
+    >>> from pathlib import Path
+    >>> import tempfile
+    >>> tmp_path = Path(tempfile.gettempdir())
+
+    >>> fpath = tmp_path / "test.net"
     >>> G = nx.path_graph(4)
-    >>> nx.write_pajek(G, "test.net")
+    >>> nx.write_pajek(G, fpath)
+
+    >>> with open(fpath) as fh:  # The data as stored in pajek format
+    ...     print(fh.read())
+    *vertices 4
+    1 0 0.0 0.0 ellipse
+    2 1 0.0 0.0 ellipse
+    3 2 0.0 0.0 ellipse
+    4 3 0.0 0.0 ellipse
+    *edges
+    1 2 1.0
+    2 3 1.0
+    3 4 1.0
+    <BLANKLINE>
 
     Warnings
     --------
@@ -130,15 +148,15 @@ def write_pajek(G, path, encoding="UTF-8"):
 
 
 @open_file(0, mode="rb")
-@nx._dispatchable(graphs=None)
+@nx._dispatchable(graphs=None, returns_graph=True)
 def read_pajek(path, encoding="UTF-8"):
     """Read graph in Pajek format from path.
 
     Parameters
     ----------
     path : file or string
-       File or filename to write.
-       Filenames ending in .gz or .bz2 will be uncompressed.
+       Filename or file handle to read.
+       Filenames ending in .gz or .bz2 will be decompressed.
 
     Returns
     -------
@@ -146,13 +164,21 @@ def read_pajek(path, encoding="UTF-8"):
 
     Examples
     --------
-    >>> G = nx.path_graph(4)
-    >>> nx.write_pajek(G, "test.net")
-    >>> G = nx.read_pajek("test.net")
+    >>> from pathlib import Path
+    >>> import tempfile
+    >>> tmp_path = Path(tempfile.gettempdir())
+
+    >>> fpath = tmp_path / "test.net"
+    >>> nx.write_pajek(nx.path_graph(4), fpath)
+    >>> G = nx.read_pajek(fpath)
+    >>> G.edges
+    MultiEdgeView([('0', '1', 0), ('1', '2', 0), ('2', '3', 0)])
 
     To create a Graph instead of a MultiGraph use
 
     >>> G1 = nx.Graph(G)
+    >>> G1.edges
+    EdgeView([('0', '1'), ('1', '2'), ('2', '3')])
 
     References
     ----------
@@ -163,7 +189,7 @@ def read_pajek(path, encoding="UTF-8"):
     return parse_pajek(lines)
 
 
-@nx._dispatchable(graphs=None)
+@nx._dispatchable(graphs=None, returns_graph=True)
 def parse_pajek(lines):
     """Parse Pajek format graph from string or iterable.
 
@@ -277,10 +303,14 @@ def parse_pajek(lines):
 
 def make_qstr(t):
     """Returns the string representation of t.
-    Add outer double-quotes if the string has a space.
+
+    Wrap the string in double-quotes if it contains whitespace, a double
+    quote, or a backslash, escaping the latter two so the Pajek reader
+    (which splits with shlex) recovers the original string unchanged.
     """
     if not isinstance(t, str):
         t = str(t)
-    if " " in t:
+    if any(c.isspace() or c in '"\\' for c in t):
+        t = t.replace("\\", "\\\\").replace('"', '\\"')
         t = f'"{t}"'
     return t

@@ -16,6 +16,7 @@ Format
 GEXF is an XML format.  See http://gexf.net/schema.html for the
 specification and http://gexf.net/basic.html for examples.
 """
+
 import itertools
 import time
 from xml.etree.ElementTree import (
@@ -43,6 +44,14 @@ def write_gexf(G, path, encoding="utf-8", prettyprint=True, version="1.2draft"):
     schemas used for parameters which are not user defined,
     e.g. visualization 'viz' [2]_. See example for usage.
 
+    .. warning::
+
+       The `GEXF specification <https://gexf.net/schema.html>`_ reserves some
+       keywords (e.g. ``id``, ``pid``, ``label``, etc.) for specifying node/edge
+       metadata in the file format. Ensure NetworkX node/edge attribute names
+       do not use these special keywords to guarantee all attributes are preserved
+       as expected when roundtripping to/from GEXF format.
+
     Parameters
     ----------
     G : graph
@@ -57,21 +66,78 @@ def write_gexf(G, path, encoding="utf-8", prettyprint=True, version="1.2draft"):
     version: string (optional, default: '1.2draft')
        The version of GEXF to be used for nodes attributes checking
 
+    Raises
+    ------
+    ValueError
+        If an attribute has mixed typed values across nodes or edges.
+
     Examples
     --------
-    >>> G = nx.path_graph(4)
-    >>> nx.write_gexf(G, "test.gexf")
+    >>> from pathlib import Path
+    >>> import tempfile
+    >>> tmp_path = Path(tempfile.gettempdir())
 
-    # visualization data
+    >>> G = nx.path_graph(4)
+    >>> fpath = tmp_path / "test.gexf"
+    >>> nx.write_gexf(G, fpath)
+
+    View the GEXF graph data, ignoring the header/metadata:
+
+    >>> with open(fpath) as fh:
+    ...     lines_from_file = fh.readlines()
+    >>> print("".join(lines_from_file[5:-1]))
+      <graph defaultedgetype="undirected" mode="static" name="">
+        <nodes>
+          <node id="0" label="0" />
+          <node id="1" label="1" />
+          <node id="2" label="2" />
+          <node id="3" label="3" />
+        </nodes>
+        <edges>
+          <edge source="0" target="1" id="0" />
+          <edge source="1" target="2" id="1" />
+          <edge source="2" target="3" id="2" />
+        </edges>
+      </graph>
+    <BLANKLINE>
+
+    Visualization data in GEXF format is supported and is read from the ``"viz"``
+    node attribute:
+
     >>> G.nodes[0]["viz"] = {"size": 54}
     >>> G.nodes[0]["viz"]["position"] = {"x": 0, "y": 1}
     >>> G.nodes[0]["viz"]["color"] = {"r": 0, "g": 0, "b": 256}
+    >>> nx.write_gexf(G, fpath)
 
+    >>> with open(fpath) as fh:
+    ...     lines_from_file = fh.readlines()
+    >>> print("".join(lines_from_file[5:-1]))  # Ignore header and metadata tags
+      <graph defaultedgetype="undirected" mode="static" name="">
+        <nodes>
+          <node id="0" label="0">
+            <viz:color r="0" g="0" b="256" a="1.0" />
+            <viz:size value="54" />
+            <viz:position x="0" y="1" z="None" />
+          </node>
+          <node id="1" label="1" />
+          <node id="2" label="2" />
+          <node id="3" label="3" />
+        </nodes>
+        <edges>
+          <edge source="0" target="1" id="0" />
+          <edge source="1" target="2" id="1" />
+          <edge source="2" target="3" id="2" />
+        </edges>
+      </graph>
+    <BLANKLINE>
 
     Notes
     -----
     This implementation does not support mixed graphs (directed and undirected
     edges together).
+
+    This implementation supports writing a single graph per GEXF file.
+    GEXF documents containing multiple graphs are not supported.
 
     The node id attribute is set to be the string of the node label.
     If you want to specify an id use set it as node data, e.g.
@@ -88,7 +154,7 @@ def write_gexf(G, path, encoding="utf-8", prettyprint=True, version="1.2draft"):
 
 
 def generate_gexf(G, encoding="utf-8", prettyprint=True, version="1.2draft"):
-    """Generate lines of GEXF format representation of G.
+    r"""Generate lines of GEXF format representation of G.
 
     "GEXF (Graph Exchange XML Format) is a language for describing
     complex networks structures, their associated data and dynamics" [1]_.
@@ -105,19 +171,50 @@ def generate_gexf(G, encoding="utf-8", prettyprint=True, version="1.2draft"):
     Version of GEFX File Format (see http://gexf.net/schema.html)
     Supported values: "1.1draft", "1.2draft"
 
+    Yields
+    ------
+    str
+        Lines representing the graph in GEXF format
+
+    Raises
+    ------
+    ValueError
+        If an attribute has mixed typed values across nodes or edges.
 
     Examples
     --------
+    >>> import itertools
+
     >>> G = nx.path_graph(4)
-    >>> linefeed = chr(10)  # linefeed=\n
-    >>> s = linefeed.join(nx.generate_gexf(G))
-    >>> for line in nx.generate_gexf(G):  # doctest: +SKIP
-    ...     print(line)
+    >>> gexf_gen = nx.generate_gexf(G)
+
+    The first several lines are the header containing only metadata - skip them
+    in this example for the purposes of viewing only the GEXF-formatted graph data:
+
+    >>> gexf_headerless = itertools.islice(gexf_gen, 4, None)
+    >>> print("\n".join(gexf_headerless))
+      <graph defaultedgetype="undirected" mode="static" name="">
+        <nodes>
+          <node id="0" label="0" />
+          <node id="1" label="1" />
+          <node id="2" label="2" />
+          <node id="3" label="3" />
+        </nodes>
+        <edges>
+          <edge source="0" target="1" id="0" />
+          <edge source="1" target="2" id="1" />
+          <edge source="2" target="3" id="2" />
+        </edges>
+      </graph>
+    </gexf>
 
     Notes
     -----
     This implementation does not support mixed graphs (directed and undirected
     edges together).
+
+    This implementation supports writing a single graph per GEXF file.
+    GEXF documents containing multiple graphs are not supported.
 
     The node id attribute is set to be the string of the node label.
     If you want to specify an id use set it as node data, e.g.
@@ -133,7 +230,7 @@ def generate_gexf(G, encoding="utf-8", prettyprint=True, version="1.2draft"):
 
 
 @open_file(0, mode="rb")
-@nx._dispatchable(graphs=None)
+@nx._dispatchable(graphs=None, returns_graph=True)
 def read_gexf(path, node_type=None, relabel=False, version="1.2draft"):
     """Read graph in GEXF format from path.
 
@@ -143,8 +240,8 @@ def read_gexf(path, node_type=None, relabel=False, version="1.2draft"):
     Parameters
     ----------
     path : file or string
-       File or file name to read.
-       File names ending in .gz or .bz2 will be decompressed.
+       Filename or file handle to read.
+       Filenames ending in .gz or .bz2 will be decompressed.
     node_type: Python type (default: None)
        Convert node ids to this type if not None.
     relabel : bool (default: False)
@@ -164,6 +261,9 @@ def read_gexf(path, node_type=None, relabel=False, version="1.2draft"):
     -----
     This implementation does not support mixed graphs (directed and undirected
     edges together).
+
+    This implementation supports reading a single graph per GEXF file.
+    GEXF documents containing multiple graphs are not supported.
 
     References
     ----------
@@ -202,6 +302,18 @@ class GEXF:
                 ]
             ),
             "VERSION": "1.2",
+        },
+        "1.3": {
+            "NS_GEXF": "http://gexf.net/1.3",
+            "NS_VIZ": "http://gexf.net/1.3/viz",
+            "NS_XSI": "http://w3.org/2001/XMLSchema-instance",
+            "SCHEMALOCATION": " ".join(
+                [
+                    "http://gexf.net/1.3",
+                    "http://gexf.net/1.3/gexf.xsd",
+                ]
+            ),
+            "VERSION": "1.3",
         },
     }
 
@@ -293,11 +405,11 @@ class GEXFWriter(GEXF):
 
         # Make meta element a non-graph element
         # Also add lastmodifieddate as attribute, not tag
-        meta_element = Element("meta")
+        self.meta_element = Element("meta")
         subelement_text = f"NetworkX {nx.__version__}"
-        SubElement(meta_element, "creator").text = subelement_text
-        meta_element.set("lastmodifieddate", time.strftime("%Y-%m-%d"))
-        self.xml.append(meta_element)
+        SubElement(self.meta_element, "creator").text = subelement_text
+        self.meta_element.set("lastmodifieddate", time.strftime("%Y-%m-%d"))
+        self.xml.append(self.meta_element)
 
         register_namespace("viz", self.NS_VIZ)
 
@@ -334,6 +446,14 @@ class GEXFWriter(GEXF):
             mode = "dynamic"
         else:
             mode = "static"
+        # set graph description in meta element
+        description = G.graph.get("description")
+        if description is not None:
+            SubElement(self.meta_element, "description").text = str(description)
+        # set graph keywords in meta element
+        keywords = G.graph.get("keywords")
+        if keywords is not None:
+            SubElement(self.meta_element, "keywords").text = str(keywords)
         # Add a graph element to the XML
         if G.is_directed():
             default = "directed"
@@ -481,15 +601,18 @@ class GEXFWriter(GEXF):
                 for val, start, end in v:
                     e = Element("attvalue")
                     e.attrib["for"] = attr_id
-                    e.attrib["value"] = str(val)
-                    # Handle nan, inf, -inf differently
-                    if val_type == float:
-                        if e.attrib["value"] == "inf":
-                            e.attrib["value"] = "INF"
-                        elif e.attrib["value"] == "nan":
-                            e.attrib["value"] = "NaN"
-                        elif e.attrib["value"] == "-inf":
-                            e.attrib["value"] = "-INF"
+                    if isinstance(val, bool):
+                        e.attrib["value"] = str(val).lower()
+                    else:
+                        e.attrib["value"] = str(val)
+                        # Handle nan, inf, -inf differently
+                        if val_type is float:
+                            if e.attrib["value"] == "inf":
+                                e.attrib["value"] = "INF"
+                            elif e.attrib["value"] == "nan":
+                                e.attrib["value"] = "NaN"
+                            elif e.attrib["value"] == "-inf":
+                                e.attrib["value"] = "-INF"
                     if start is not None:
                         e.attrib["start"] = str(start)
                     if end is not None:
@@ -508,7 +631,7 @@ class GEXFWriter(GEXF):
                 else:
                     e.attrib["value"] = str(v)
                     # Handle float nan, inf, -inf differently
-                    if val_type == float:
+                    if val_type is float:
                         if e.attrib["value"] == "inf":
                             e.attrib["value"] = "INF"
                         elif e.attrib["value"] == "nan":
@@ -522,11 +645,22 @@ class GEXFWriter(GEXF):
     def get_attr_id(self, title, attr_type, edge_or_node, default, mode):
         # find the id of the attribute or generate a new id
         try:
-            return self.attr[edge_or_node][mode][title]
+            existing_id = self.attr[edge_or_node][mode][title]["id"]
+            existing_type = self.attr[edge_or_node][mode][title]["attr_type"]
+
+            # Check if the type of the attribute value is consistent with the type of the attribute
+            if existing_type != attr_type:
+                raise ValueError(
+                    f"Attribute {title} has type {existing_type} but value {attr_type} was given."
+                )
+
+            return existing_id
         except KeyError:
             # generate new id
             new_id = str(next(self.attr_id))
-            self.attr[edge_or_node][mode][title] = new_id
+            self.attr[edge_or_node][mode][title] = {}
+            self.attr[edge_or_node][mode][title]["id"] = new_id
+            self.attr[edge_or_node][mode][title]["attr_type"] = attr_type
             attr_kwargs = {"id": new_id, "title": title, "type": attr_type}
             attribute = Element("attribute", **attr_kwargs)
             # add subelement for data default value if present
@@ -642,21 +776,21 @@ class GEXFWriter(GEXF):
         return node_or_edge_data
 
     def alter_graph_mode_timeformat(self, start_or_end):
-        # If 'start' or 'end' appears, alter Graph mode to dynamic and
-        # set timeformat
-        if self.graph_element.get("mode") == "static":
-            if start_or_end is not None:
-                if isinstance(start_or_end, str):
-                    timeformat = "date"
-                elif isinstance(start_or_end, float):
-                    timeformat = "double"
-                elif isinstance(start_or_end, int):
-                    timeformat = "long"
-                else:
-                    raise nx.NetworkXError(
-                        "timeformat should be of the type int, float or str"
-                    )
-                self.graph_element.set("timeformat", timeformat)
+        # If 'start' or 'end' appears, set timeformat
+        if start_or_end is not None:
+            if isinstance(start_or_end, str):
+                timeformat = "date"
+            elif isinstance(start_or_end, float):
+                timeformat = "double"
+            elif isinstance(start_or_end, int):
+                timeformat = "long"
+            else:
+                raise nx.NetworkXError(
+                    "timeformat should be of the type int, float or str"
+                )
+            self.graph_element.set("timeformat", timeformat)
+            # If Graph mode is static, alter to dynamic
+            if self.graph_element.get("mode") == "static":
                 self.graph_element.set("mode", "dynamic")
 
     def write(self, fh):
@@ -695,24 +829,35 @@ class GEXFReader(GEXF):
 
     def __call__(self, stream):
         self.xml = ElementTree(file=stream)
+        meta = self.xml.find(f"{{{self.NS_GEXF}}}meta")
         g = self.xml.find(f"{{{self.NS_GEXF}}}graph")
         if g is not None:
-            return self.make_graph(g)
+            return self.make_graph(g, meta_xml=meta)
         # try all the versions
         for version in self.versions:
             self.set_version(version)
+            meta = self.xml.find(f"{{{self.NS_GEXF}}}meta")
             g = self.xml.find(f"{{{self.NS_GEXF}}}graph")
             if g is not None:
-                return self.make_graph(g)
+                return self.make_graph(g, meta_xml=meta)
         raise nx.NetworkXError("No <graph> element in GEXF file.")
 
-    def make_graph(self, graph_xml):
+    def make_graph(self, graph_xml, meta_xml=None):
         # start with empty DiGraph or MultiDiGraph
         edgedefault = graph_xml.get("defaultedgetype", None)
         if edgedefault == "directed":
             G = nx.MultiDiGraph()
         else:
             G = nx.MultiGraph()
+
+        # add description and keywords from meta element
+        if meta_xml is not None:
+            description = meta_xml.find(f"{{{self.NS_GEXF}}}description")
+            if description is not None:
+                G.graph["description"] = description.text
+            keywords = meta_xml.find(f"{{{self.NS_GEXF}}}keywords")
+            if keywords is not None:
+                G.graph["keywords"] = keywords.text
 
         # graph attributes
         graph_name = graph_xml.get("name", "")
@@ -755,7 +900,7 @@ class GEXFReader(GEXF):
                 edge_default.update(ed)
                 G.graph["edge_default"] = edge_default
             else:
-                raise  # unknown attribute class
+                raise nx.NetworkXError(f"Unknown attribute class {attr_class}.")
 
         # Hack to handle Gephi0.7beta bug
         # add weight attribute
@@ -1047,9 +1192,7 @@ def relabel_gexf_graph(G):
     x, y = zip(*mapping)
     if len(set(y)) != len(G):
         raise nx.NetworkXError(
-            "Failed to relabel nodes: "
-            "duplicate node labels found. "
-            "Use relabel=False."
+            "Failed to relabel nodes: duplicate node labels found. Use relabel=False."
         )
     mapping = dict(mapping)
     H = nx.relabel_nodes(G, mapping)

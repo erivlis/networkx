@@ -1,6 +1,7 @@
 """
-    Unit tests for edgelists.
+Unit tests for edgelists.
 """
+
 import io
 import textwrap
 
@@ -93,7 +94,11 @@ def test_read_weighted_edgelist():
     (
         (edges_with_weight, {}, _expected_edges_weights),
         (edges_with_multiple_attrs, {}, _expected_edges_multiattr),
-        (edges_with_multiple_attrs_csv, {"delimiter": ","}, _expected_edges_multiattr),
+        (
+            edges_with_multiple_attrs_csv,
+            {"delimiter": ","},
+            _expected_edges_multiattr,
+        ),
     ),
 )
 def test_read_edgelist_with_data(data, extra_kwargs, expected):
@@ -263,7 +268,7 @@ class TestEdgelist:
         assert H is not H2  # they should be different graphs
         G.remove_node("g")  # isolated nodes are not written in edgelist
         assert nodes_equal(list(H), list(G))
-        assert edges_equal(list(H.edges()), list(G.edges()))
+        assert edges_equal(list(H.edges()), list(G.edges()), directed=True)
 
     def test_edgelist_integers(self, tmp_path):
         G = nx.convert_node_labels_to_integers(self.G)
@@ -293,4 +298,21 @@ class TestEdgelist:
         H2 = nx.read_edgelist(fname, nodetype=int, create_using=nx.MultiDiGraph())
         assert H is not H2  # they should be different graphs
         assert nodes_equal(list(H), list(G))
-        assert edges_equal(list(H.edges()), list(G.edges()))
+        assert edges_equal(list(H.edges()), list(G.edges()), directed=True)
+
+
+def test_edgelist_consistent_strip_handling():
+    """See gh-7462
+
+    Input when printed looks like::
+
+        1       2       3
+        2       3
+        3       4       3.0
+
+    Note the trailing \\t after the `3` in the second row, indicating an empty
+    data value.
+    """
+    s = io.StringIO("1\t2\t3\n2\t3\t\n3\t4\t3.0")
+    G = nx.parse_edgelist(s, delimiter="\t", nodetype=int, data=[("value", str)])
+    assert sorted(G.edges(data="value")) == [(1, 2, "3"), (2, 3, ""), (3, 4, "3.0")]

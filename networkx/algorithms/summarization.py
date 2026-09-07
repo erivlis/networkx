@@ -58,6 +58,7 @@ supports graphs with one edge type.
 For more information on graph summarization, see `Graph Summarization Methods
 and Applications: A Survey <https://dl.acm.org/doi/abs/10.1145/3186727>`_
 """
+
 from collections import Counter, defaultdict
 
 import networkx as nx
@@ -65,7 +66,7 @@ import networkx as nx
 __all__ = ["dedensify", "snap_aggregation"]
 
 
-@nx._dispatchable
+@nx._dispatchable(mutates_input={"not copy": 3}, returns_graph=True)
 def dedensify(G, threshold, prefix=None, copy=True):
     """Compresses neighborhoods around high-degree nodes
 
@@ -370,9 +371,6 @@ def _snap_split(groups, neighbor_info, group_lookup, group_id):
     neighbor_info: dict
         A data structure indicating the number of edges a node has with the
         groups in the current summarization of each edge type
-    edge_types: dict
-        dictionary of edges in the graph and their corresponding attributes recognized
-        in the summarization
     group_lookup: dict
         dictionary of nodes and their current corresponding group ID
     group_id: object
@@ -404,7 +402,9 @@ def _snap_split(groups, neighbor_info, group_lookup, group_id):
     return groups
 
 
-@nx._dispatchable(node_attrs="[node_attributes]", edge_attrs="[edge_attributes]")
+@nx._dispatchable(
+    node_attrs="[node_attributes]", edge_attrs="[edge_attributes]", returns_graph=True
+)
 def snap_aggregation(
     G,
     node_attributes,

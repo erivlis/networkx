@@ -40,6 +40,7 @@ http://graphml.graphdrawing.org/specification.html for the specification and
 http://graphml.graphdrawing.org/primer/graphml-primer.html
 for examples.
 """
+
 import warnings
 from collections import defaultdict
 
@@ -94,8 +95,28 @@ def write_graphml_xml(
 
     Examples
     --------
+    >>> from pathlib import Path
+    >>> import tempfile
+    >>> tmp_path = Path(tempfile.gettempdir())
+
+    Write graph data to disk in graphml format:
+
     >>> G = nx.path_graph(4)
-    >>> nx.write_graphml(G, "test.graphml")
+    >>> fpath = tmp_path / "test.graphml"
+    >>> nx.write_graphml(G, fpath)
+
+    View the graphml data, ignoring the first two lines of header/metadata:
+
+    >>> with open(fpath) as fh:
+    ...     lines_from_file = fh.readlines()
+    >>> print("".join(lines_from_file[2:]))
+    <node id="1"/>
+    <node id="2"/>
+    <node id="3"/>
+    <edge source="0" target="1"/>
+    <edge source="1" target="2"/>
+    <edge source="2" target="3"/>
+    </graph></graphml>
 
     Notes
     -----
@@ -152,8 +173,28 @@ def write_graphml_lxml(
 
     Examples
     --------
+    >>> from pathlib import Path
+    >>> import tempfile
+    >>> tmp_path = Path(tempfile.gettempdir())
+
+    Write graph data to disk in graphml format:
+
     >>> G = nx.path_graph(4)
-    >>> nx.write_graphml_lxml(G, "fourpath.graphml")
+    >>> fpath = tmp_path / "fourpath.graphml"
+    >>> nx.write_graphml(G, fpath)
+
+    View the graphml data, ignoring the first two lines of header/metadata:
+
+    >>> with open(fpath) as fh:
+    ...     lines_from_file = fh.readlines()
+    >>> print("".join(lines_from_file[2:]))
+    <node id="1"/>
+    <node id="2"/>
+    <node id="3"/>
+    <edge source="0" target="1"/>
+    <edge source="1" target="2"/>
+    <edge source="2" target="3"/>
+    </graph></graphml>
 
     Notes
     -----
@@ -233,15 +274,15 @@ def generate_graphml(
 
 
 @open_file(0, mode="rb")
-@nx._dispatchable(graphs=None)
+@nx._dispatchable(graphs=None, returns_graph=True)
 def read_graphml(path, node_type=str, edge_key_type=int, force_multigraph=False):
     """Read graph in GraphML format from path.
 
     Parameters
     ----------
     path : file or string
-       File or filename to write.
-       Filenames ending in .gz or .bz2 will be compressed.
+       Filename or file handle to read.
+       Filenames ending in .gz or .bz2 will be decompressed.
 
     node_type: Python type (default: str)
        Convert node ids to this type
@@ -306,7 +347,7 @@ def read_graphml(path, node_type=str, edge_key_type=int, force_multigraph=False)
     return glist[0]
 
 
-@nx._dispatchable(graphs=None)
+@nx._dispatchable(graphs=None, returns_graph=True)
 def parse_graphml(
     graphml_string, node_type=str, edge_key_type=int, force_multigraph=False
 ):
@@ -970,7 +1011,7 @@ class GraphMLReader(GraphML):
             text = data_element.text
             # assume anything with subelements is a yfiles extension
             if text is not None and len(list(data_element)) == 0:
-                if data_type == bool:
+                if data_type is bool:
                     # Ignore cases.
                     # http://docs.oracle.com/javase/6/docs/api/java/lang/
                     # Boolean.html#parseBoolean%28java.lang.String%29
@@ -982,7 +1023,7 @@ class GraphMLReader(GraphML):
                 node_label = None
                 # set GenericNode's configuration as shape type
                 gn = data_element.find(f"{{{self.NS_Y}}}GenericNode")
-                if gn:
+                if gn is not None:
                     data["shape_type"] = gn.get("configuration")
                 for node_type in ["GenericNode", "ShapeNode", "SVGNode", "ImageNode"]:
                     pref = f"{{{self.NS_Y}}}{node_type}/{{{self.NS_Y}}}"
@@ -1010,9 +1051,10 @@ class GraphMLReader(GraphML):
                     edge_label = data_element.find(f"{pref}EdgeLabel")
                     if edge_label is not None:
                         break
-
                 if edge_label is not None:
                     data["label"] = edge_label.text
+            elif text is None:
+                data[data_name] = ""
         return data
 
     def find_graphml_keys(self, graph_element):
@@ -1042,7 +1084,7 @@ class GraphMLReader(GraphML):
             if default is not None:
                 # Handle default values identically to data element values
                 python_type = graphml_keys[attr_id]["type"]
-                if python_type == bool:
+                if python_type is bool:
                     graphml_key_defaults[attr_id] = self.convert_bool[
                         default.text.lower()
                     ]

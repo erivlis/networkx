@@ -15,6 +15,7 @@ Algorithms
    bipartite
    boundary
    bridges
+   broadcasting
    centrality
    chains
    chordal
@@ -54,6 +55,7 @@ Algorithms
    moral
    node_classification
    operators
+   perfect_graph
    planarity
    planar_drawing
    polynomials

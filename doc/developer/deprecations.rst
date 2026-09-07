@@ -36,37 +36,45 @@ releases is not a strict rule and in some cases, the developers can agree on a
 different procedure upon justification (like when we can't detect the change,
 or it involves moving or deleting an entire function for example).
 
+Procedure
+---------
+To set up a function for deprecation:
+
+- Use a deprecation warning to warn users. For example::
+
+      msg = "curly_hair is deprecated and will be removed in v3.0. Use sum() instead."
+      warnings.warn(msg, DeprecationWarning)
+
+- Add a warnings filter to ``networkx/conftest.py``::
+
+      warnings.filterwarnings(
+          "ignore", category=DeprecationWarning, message=<start of message>
+      )
+
+- Add a reminder to ``doc/developer/deprecations.rst`` for the team
+  to remove the deprecated functionality in the future. For example:
+
+  .. code-block:: rst
+
+     * In ``utils/misc.py`` remove ``generate_unique_node`` and related tests.
+
+.. note::
+
+   To reviewers: make sure the merge message has a brief description of the
+   change(s) and if the PR closes an issue add, for example, "Closes #123"
+   where 123 is the issue number.
+
 Todo
 ----
 
 Make sure to review ``networkx/conftest.py`` after removing deprecated code.
 
-Version 3.3
+Version 3.8
 ~~~~~~~~~~~
-* Remove the ``forest_str`` function from ``readwrite/text.py``. Replace
-  existing usages with ``write_network_text``.
+* Remove ``maybe_regular_expander`` from ``networkx.generators.expanders``.
+* In ``algorithms/approximation/steinertree.py`` remove ``metric_closure`` and related tests.
 
-Version 3.4
+Version 3.9
 ~~~~~~~~~~~
-* Remove the ``random_tree`` function from ``generators/trees.py``. Replace
-  existing usages with ``random_labeled_tree``.
-* Remove the ``sort_neighbors`` input parameter from ``generic_bfs_edges``.
-* Remove ``MultiDiGraph_EdgeKey`` class from ``algorithms/tree/branchings.py``. 
-* Remove ``Edmonds`` class from ``algorithms/tree/branchings.py``.
-* Remove ``normalized`` kwarg from ``algorithms.s_metric``
-* Remove renamed function ``join()`` in ``algorithms/tree/operations.py`` and
-  in ``doc/reference/algorithms/trees.rst``
-* Remove ``strongly_connected_components_recursive`` from
-  ``algorithms/components/strongly_connected.py``
-
-Version 3.5
-~~~~~~~~~~~
-* Remove ``all_triplets`` from ``algorithms/triads.py``
-* Remove ``random_triad`` from ``algorithms/triad.py``.
-* Remove ``d_separated`` from ``algorithms/d_separation.py``.
-* Remove ``minimal_d_separator`` from ``algorithms/d_separation.py``.
-* Add `not_implemented_for("multigraph”)` decorator to ``k_core``, ``k_shell``, ``k_crust`` and ``k_corona`` functions.
-* Change ``single_target_shortest_path_length`` in ``algorithms/shortest_path/unweighted.py``
-  to return a dict. See #6527
-* Change ``shortest_path`` in ``algorithms/shortest_path/generic.py``
-  to return a iterator. See #6527
+* Remove ``bfs_predecessors`` from ``networkx.algorithms.traversal.breadth_first_searcph``.
+* Remove the ``p2g`` module from ``networkx.readwrite``.

@@ -2,13 +2,9 @@ import bz2
 import collections
 import gzip
 import inspect
-import itertools
 import re
-import warnings
+import threading
 from collections import defaultdict
-from contextlib import contextmanager
-from functools import wraps
-from inspect import Parameter, signature
 from os.path import splitext
 from pathlib import Path
 
@@ -22,7 +18,6 @@ __all__ = [
     "np_random_state",
     "py_random_state",
     "argmap",
-    "deprecate_positional_args",
 ]
 
 
@@ -267,14 +262,15 @@ def nodes_or_number(which_args):
 
 
 def np_random_state(random_state_argument):
-    """Decorator to generate a `numpy.random.RandomState` instance.
+    """Decorator to generate a numpy RandomState or Generator instance.
 
     The decorator processes the argument indicated by `random_state_argument`
     using :func:`nx.utils.create_random_state`.
     The argument value can be a seed (integer), or a `numpy.random.RandomState`
-    instance or (`None` or `numpy.random`). The latter options use the glocal
-    random number generator used by `numpy.random`.
-    The result is a `numpy.random.RandomState` instance.
+    or `numpy.random.RandomState` instance or (`None` or `numpy.random`).
+    The latter two options use the global random number generator for `numpy.random`.
+
+    The returned instance is a `numpy.random.RandomState` or `numpy.random.Generator`.
 
     Parameters
     ----------
@@ -315,19 +311,24 @@ def np_random_state(random_state_argument):
 def py_random_state(random_state_argument):
     """Decorator to generate a random.Random instance (or equiv).
 
-    The decorator processes the argument indicated by `random_state_argument`
-    using :func:`nx.utils.create_py_random_state`.
-    The argument value can be a seed (integer), or a random number generator::
+    This decorator processes `random_state_argument` using
+    :func:`nx.utils.create_py_random_state`.
+    The input value can be a seed (integer), or a random number generator::
 
         If int, return a random.Random instance set with seed=int.
         If random.Random instance, return it.
         If None or the `random` package, return the global random number
         generator used by `random`.
-        If np.random package, return the global numpy random number
-        generator wrapped in a PythonRandomInterface class.
-        If np.random.RandomState instance, return it wrapped in
-        PythonRandomInterface
-        If a PythonRandomInterface instance, return it
+        If np.random package, or the default numpy RandomState instance,
+        return the default numpy random number generator wrapped in a
+        `PythonRandomViaNumpyBits`  class.
+        If np.random.Generator instance, return it wrapped in a
+        `PythonRandomViaNumpyBits`  class.
+
+        # Legacy options
+        If np.random.RandomState instance, return it wrapped in a
+        `PythonRandomInterface` class.
+        If a `PythonRandomInterface` instance, return it
 
     Parameters
     ----------
@@ -752,10 +753,11 @@ class argmap:
         [1] https://github.com/networkx/networkx/issues/4732
 
         """
-        real_func = func.__argmap__.compile(func.__wrapped__)
-        func.__code__ = real_func.__code__
-        func.__globals__.update(real_func.__globals__)
-        func.__dict__.update(real_func.__dict__)
+        with argmap._compile_lock:
+            real_func = func.__argmap__.compile(func.__wrapped__)
+            func.__globals__.update(real_func.__globals__)
+            func.__dict__.update(real_func.__dict__)
+            func.__code__ = real_func.__code__
         return func
 
     def __call__(self, f):
@@ -821,6 +823,9 @@ class argmap:
         return func
 
     __count = 0
+    # Serializes _lazy_compile so the compound __globals__/__code__ publish and
+    # the __count increments it drives are safe under free-threaded Python.
+    _compile_lock = threading.Lock()
 
     @classmethod
     def _count(cls):
@@ -1141,7 +1146,7 @@ class argmap:
             def_sig.append(name)
 
         fname = cls._name(f)
-        def_sig = f'def {fname}({", ".join(def_sig)}):'
+        def_sig = f"def {fname}({', '.join(def_sig)}):"
 
         call_sig = f"return {{}}({', '.join(call_sig)})"
 
@@ -1230,60 +1235,3 @@ class argmap:
         for line in argmap._flatten(lines, set()):
             yield f"{argmap._tabs[:depth]}{line}"
             depth += (line[-1:] == ":") - (line[-1:] == "#")
-
-
-# Vendored in from https://github.com/scikit-learn/scikit-learn/blob/8ed0270b99344cee9bb253cbfa1d986561ea6cd7/sklearn/utils/validation.py#L37C1-L90C44
-def deprecate_positional_args(func=None, *, version):
-    """Decorator for methods that issues warnings for positional arguments.
-
-    Using the keyword-only argument syntax in pep 3102, arguments after the
-    * will issue a warning when passed as a positional argument.
-
-    Parameters
-    ----------
-    func : callable, default=None
-        Function to check arguments on.
-    version : callable, default="1.3"
-        The version when positional arguments will result in error.
-    """
-
-    def _inner_deprecate_positional_args(f):
-        sig = signature(f)
-        kwonly_args = []
-        all_args = []
-
-        for name, param in sig.parameters.items():
-            if param.kind == Parameter.POSITIONAL_OR_KEYWORD:
-                all_args.append(name)
-            elif param.kind == Parameter.KEYWORD_ONLY:
-                kwonly_args.append(name)
-
-        @wraps(f)
-        def inner_f(*args, **kwargs):
-            extra_args = len(args) - len(all_args)
-            if extra_args <= 0:
-                return f(*args, **kwargs)
-
-            # extra_args > 0
-            args_msg = [
-                f"{name}={arg}"
-                for name, arg in zip(kwonly_args[:extra_args], args[-extra_args:])
-            ]
-            args_msg = ", ".join(args_msg)
-            warnings.warn(
-                (
-                    f"Pass {args_msg} as keyword args. From NetworkX version "
-                    f"{version} passing these as positional arguments "
-                    "will result in an error"
-                ),
-                FutureWarning,
-            )
-            kwargs.update(zip(sig.parameters, args))
-            return f(**kwargs)
-
-        return inner_f
-
-    if func is not None:
-        return _inner_deprecate_positional_args(func)
-
-    return _inner_deprecate_positional_args

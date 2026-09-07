@@ -1,5 +1,5 @@
-"""Node assortativity coefficients and correlation measures.
-"""
+"""Node assortativity coefficients and correlation measures."""
+
 import networkx as nx
 from networkx.algorithms.assortativity.mixing import (
     attribute_mixing_matrix,
@@ -145,6 +145,10 @@ def degree_pearson_correlation_coefficient(G, x="out", y="in", weight=None, node
     -----
     This calls scipy.stats.pearsonr.
 
+    Returns ``nan`` if the graph has fewer than two ``(degree, degree)``
+    pairs, since the Pearson correlation coefficient is undefined in
+    that case.
+
     References
     ----------
     .. [1] M. E. J. Newman, Mixing patterns in networks
@@ -154,9 +158,11 @@ def degree_pearson_correlation_coefficient(G, x="out", y="in", weight=None, node
     """
     import scipy as sp
 
-    xy = node_degree_xy(G, x=x, y=y, nodes=nodes, weight=weight)
+    xy = list(node_degree_xy(G, x=x, y=y, nodes=nodes, weight=weight))
+    if len(xy) < 2:
+        return float("nan")
     x, y = zip(*xy)
-    return sp.stats.pearsonr(x, y)[0]
+    return float(sp.stats.pearsonr(x, y)[0])
 
 
 @nx._dispatchable(node_attrs="attribute")
@@ -280,7 +286,7 @@ def attribute_ac(M):
     s = (M @ M).sum()
     t = M.trace()
     r = (t - s) / (1 - s)
-    return r
+    return float(r)
 
 
 def _numeric_ac(M, mapping):
@@ -299,4 +305,4 @@ def _numeric_ac(M, mapping):
     varb = (b[idx] * y**2).sum() - ((b[idx] * y).sum()) ** 2
     xy = np.outer(x, y)
     ab = np.outer(a[idx], b[idx])
-    return (xy * (M - ab)).sum() / np.sqrt(vara * varb)
+    return float((xy * (M - ab)).sum() / np.sqrt(vara * varb))

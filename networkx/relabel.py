@@ -3,12 +3,18 @@ import networkx as nx
 __all__ = ["convert_node_labels_to_integers", "relabel_nodes"]
 
 
-@nx._dispatchable(preserve_all_attrs=True)
+@nx._dispatchable(
+    preserve_all_attrs=True, mutates_input={"not copy": 2}, returns_graph=True
+)
 def relabel_nodes(G, mapping, copy=True):
     """Relabel the nodes of the graph G according to a given mapping.
 
     The original node ordering may not be preserved if `copy` is `False` and the
     mapping includes overlap between old and new labels.
+
+    When multiple nodes are mapped to the same target node, attribute
+    handling depends on `copy` kwarg. For predictable attribute handling when
+    combining nodes, consider using :any:`contracted_nodes`.
 
     Parameters
     ----------
@@ -114,6 +120,7 @@ def relabel_nodes(G, mapping, copy=True):
     See Also
     --------
     convert_node_labels_to_integers
+    :any:`contracted_nodes`
     """
     # you can pass any callable e.g. f(old_label) -> new_label or
     # e.g. str(old_label) -> new_label, but we'll just make a dictionary here regardless
@@ -221,9 +228,7 @@ def _relabel_copy(G, mapping):
     return H
 
 
-@nx._dispatchable(
-    preserve_edge_attrs=True, preserve_node_attrs=True, preserve_graph_attrs=True
-)
+@nx._dispatchable(preserve_all_attrs=True, returns_graph=True)
 def convert_node_labels_to_integers(
     G, first_label=0, ordering="default", label_attribute=None
 ):
