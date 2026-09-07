@@ -184,7 +184,7 @@ def gradient_network(
     for node in G:
         node_val = node_values[node]
         nbrs_and_self = itertools.chain(G.neighbors(node), (node,))
-        neighbor = scalar_operation(nbrs_and_self, key=node_values.get)
+        neighbor = scalar_operation(nbrs_and_self, key=node_values.__getitem__)
         neighbor_val = node_values[neighbor]
 
         if node == neighbor:
