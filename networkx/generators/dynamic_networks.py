@@ -39,13 +39,15 @@ def _node_value_function(scalar_field_value):
             return lambda n, d: scalar_field_value()
         if num_pos == 1:
             return lambda n, d: scalar_field_value(n)
+        if num_pos == 2:
+            return scalar_field_value
         return lambda n, d: scalar_field_value(n, d)
 
-    return lambda n, d: (
-        d[scalar_field_value]()
-        if callable(d.get(scalar_field_value, 0))
-        else d.get(scalar_field_value, 0)
-    )
+    def attr_getter(n, d):
+        val = d.get(scalar_field_value, 0)
+        return val() if callable(val) else val
+
+    return attr_getter
 
 
 def _edge_distance_function(distance):
@@ -57,11 +59,15 @@ def _edge_distance_function(distance):
             return lambda u, v, d: distance(d)
         if num_pos == 2:
             return lambda u, v, d: distance(u, v)
+        if num_pos == 3:
+            return distance
         return lambda u, v, d: distance(u, v, d)
 
-    return lambda u, v, d: (
-        d[distance]() if callable(d.get(distance, 1.0)) else d.get(distance, 1.0)
-    )
+    def attr_getter(u, v, d):
+        val = d.get(distance, 1.0)
+        return val() if callable(val) else val
+
+    return attr_getter
 
 
 @not_implemented_for("directed")
@@ -195,50 +201,56 @@ def gradient_network(
     return H
 
 
-def _bind_time_node_value(scalar_field_value, t):
+def _time_node_value_factory(scalar_field_value):
     if callable(scalar_field_value):
         num_pos = _positional_param_count(scalar_field_value)
         if num_pos == 1:
-            return lambda n, d: scalar_field_value(t)
+            return lambda t: lambda n, d: scalar_field_value(t)
         if num_pos == 2:
-            return lambda n, d: scalar_field_value(n, t)
-        return lambda n, d: scalar_field_value(n, d, t)
+            return lambda t: lambda n, d: scalar_field_value(n, t)
+        return lambda t: lambda n, d: scalar_field_value(n, d, t)
 
-    def val_func_from_attr(node, data):
-        val = data.get(scalar_field_value, 0)
-        if isinstance(val, dict):
-            return val.get(t, 0)
-        if callable(val):
-            try:
-                return val(t)
-            except TypeError:
-                return val()
-        return val
+    def bind_t(t):
+        def val_func_from_attr(node, data):
+            val = data.get(scalar_field_value, 0)
+            if isinstance(val, dict):
+                return val.get(t, 0)
+            if callable(val):
+                try:
+                    return val(t)
+                except TypeError:
+                    return val()
+            return val
 
-    return val_func_from_attr
+        return val_func_from_attr
+
+    return bind_t
 
 
-def _bind_time_edge_distance(distance, t):
+def _time_edge_distance_factory(distance):
     if callable(distance):
         num_pos = _positional_param_count(distance)
         if num_pos == 1:
-            return lambda u, v, d: distance(t)
+            return lambda t: lambda u, v, d: distance(t)
         if num_pos == 3:
-            return lambda u, v, d: distance(u, v, t)
-        return lambda u, v, d: distance(u, v, d, t)
+            return lambda t: lambda u, v, d: distance(u, v, t)
+        return lambda t: lambda u, v, d: distance(u, v, d, t)
 
-    def dist_func_from_attr(u, v, data):
-        val = data.get(distance, 1.0)
-        if isinstance(val, dict):
-            return val.get(t, 1.0)
-        if callable(val):
-            try:
-                return val(t)
-            except TypeError:
-                return val()
-        return val if val is not None else 1.0
+    def bind_t(t):
+        def dist_func_from_attr(u, v, data):
+            val = data.get(distance, 1.0)
+            if isinstance(val, dict):
+                return val.get(t, 1.0)
+            if callable(val):
+                try:
+                    return val(t)
+                except TypeError:
+                    return val()
+            return val if val is not None else 1.0
 
-    return dist_func_from_attr
+        return dist_func_from_attr
+
+    return bind_t
 
 
 @not_implemented_for("directed")
@@ -326,9 +338,12 @@ def gradient_network_sequence(
            Physical Review E. 74 (4): 046114. arXiv:cond-mat/0603861.
            https://doi.org/10.1103/physreve.74.046114
     """
+    node_val_factory = _time_node_value_factory(scalar_field_value)
+    edge_dist_factory = _time_edge_distance_factory(scalar_field_distance)
+
     for t in times:
-        val_func = _bind_time_node_value(scalar_field_value, t)
-        dist_func = _bind_time_edge_distance(scalar_field_distance, t)
+        val_func = node_val_factory(t)
+        dist_func = edge_dist_factory(t)
         H = gradient_network(
             G,
             scalar_field_value=val_func,
