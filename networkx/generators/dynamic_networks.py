@@ -15,23 +15,26 @@ __all__ = (
 )
 
 
+def _positional_param_count(func: Callable) -> int | None:
+    try:
+        params = [
+            p
+            for p in inspect.signature(func).parameters.values()
+            if p.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+            and p.default is inspect.Parameter.empty
+        ]
+        return len(params)
+    except (ValueError, TypeError):
+        return None
+
+
 def _node_value_function(scalar_field_value):
     if callable(scalar_field_value):
-        try:
-            params = [
-                p
-                for p in inspect.signature(scalar_field_value).parameters.values()
-                if p.kind
-                in (
-                    inspect.Parameter.POSITIONAL_ONLY,
-                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                )
-                and p.default is inspect.Parameter.empty
-            ]
-            num_pos = len(params)
-        except (ValueError, TypeError):
-            num_pos = None
-
+        num_pos = _positional_param_count(scalar_field_value)
         if num_pos == 0:
             return lambda n, d: scalar_field_value()
         if num_pos == 1:
@@ -47,21 +50,7 @@ def _node_value_function(scalar_field_value):
 
 def _edge_distance_function(distance):
     if callable(distance):
-        try:
-            params = [
-                p
-                for p in inspect.signature(distance).parameters.values()
-                if p.kind
-                in (
-                    inspect.Parameter.POSITIONAL_ONLY,
-                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                )
-                and p.default is inspect.Parameter.empty
-            ]
-            num_pos = len(params)
-        except (ValueError, TypeError):
-            num_pos = None
-
+        num_pos = _positional_param_count(distance)
         if num_pos == 0:
             return lambda u, v, d: distance()
         if num_pos == 1:
@@ -208,21 +197,7 @@ def gradient_network(
 
 def _bind_time_node_value(scalar_field_value, t):
     if callable(scalar_field_value):
-        try:
-            params = [
-                p
-                for p in inspect.signature(scalar_field_value).parameters.values()
-                if p.kind
-                in (
-                    inspect.Parameter.POSITIONAL_ONLY,
-                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                )
-                and p.default is inspect.Parameter.empty
-            ]
-            num_pos = len(params)
-        except (ValueError, TypeError):
-            num_pos = None
-
+        num_pos = _positional_param_count(scalar_field_value)
         if num_pos == 1:
             return lambda n, d: scalar_field_value(t)
         if num_pos == 2:
@@ -245,21 +220,7 @@ def _bind_time_node_value(scalar_field_value, t):
 
 def _bind_time_edge_distance(distance, t):
     if callable(distance):
-        try:
-            params = [
-                p
-                for p in inspect.signature(distance).parameters.values()
-                if p.kind
-                in (
-                    inspect.Parameter.POSITIONAL_ONLY,
-                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                )
-                and p.default is inspect.Parameter.empty
-            ]
-            num_pos = len(params)
-        except (ValueError, TypeError):
-            num_pos = None
-
+        num_pos = _positional_param_count(distance)
         if num_pos == 1:
             return lambda u, v, d: distance(t)
         if num_pos == 3:
